@@ -1,0 +1,463 @@
+---
+title: "Plantation Fire Severity Random Forest Analysis"
+author: "Ingrid Farnell & Alana Clason"
+date: "25/02/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+This script runs ranger using mlr3 package
+More info: https://mlr3book.mlr-org.com/introduction.html
+
+Overall data flow:
+Step 1: Import data (csvs)
+Step 2: Define spatial task
+Step 3: Define learner (ranger classification)
+Step 4: Separate task into learning (80%) and test (20%) datasets
+Step 5: Optimize learner variable importance using spatial cross fold validation
+Step 6: Train learner on training data
+Step 7: Predict test data using trained learner
+Step 8: Evaluate model on test data
+Step 9: Visualize 
+
+```{r setup, include=FALSE}
+#------------------------------ Load libraries---------------------------------#
+ls <- c("tidyverse", "data.table", "magrittr") # Data Management and Manipulation
+ls <- append(ls, c("raster","sf")) # geo comp.
+ls <- append(ls,c("pdp","mlr3","mlr3spatiotempcv","mlr3verse","ranger"))
+ls <- append(ls,c("iml","patchwork","DALEX","DALEXtra"))
+
+# Install if needed -- then load. 
+new.packages <- ls[!(ls %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+lapply(ls, library, character.only = TRUE)  # load the required packages
+rm(ls, new.packages)
+
+```
+
+# STEP 1
+Load data as sf objects into a list
+
+```{r}
+dat_names <- list.files(path="./Inputs/Shapefiles/", pattern = "cat.gpkg", full.names = TRUE)
+dat_list <- purrr::map(dat_names, read_sf)
+
+
+```
+
+# RF analysis
+STEPS 1 - 8
+
+multicorrelated variables are dropped, model is tuned for top pred variables
+```{r}
+task_names <- c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun")
+#CV_Conf <- list()
+Test_Conf <- list()
+TrainImp_dat <- list()
+RF_scores <- list()
+pd_scores <- list()
+effects <- list()
+NumCores <- 30
+
+for(i in 1:length(task_names)){
+  # Remove correlated covariates or those that are not included in the analysis
+  dat <- dat_list[[i]]
+  dat <- dat %>% 
+    dplyr::select(., -dob, -bui, -dmc, -fwi, -DEMslope, -DEMaspect, 
+                     -DFirCov, -FirCov, -PineCov, -SpruceCov)%>% #keep dc, isi for fire behaviour/spread
+          mutate_if(sapply(., is.character), as.factor)
+  
+  task <- as_task_classif_st(dat, target = "dNBRCAT", 
+                             id = task_names[i])
+  
+   #--- Step 1: Define a learner
+  # default ranger parameters: https://mlr3learners.mlr-org.com/reference/mlr_learners_regr.ranger.html
+  learner <- lrn("classif.ranger",
+                importance = "permutation",
+                respect.unordered.factors = "order",
+                predict_type = "response",
+                num.trees = 2000,
+                num.threads=NumCores)
+  
+  #--- Step 2: Split stratified task into test/train data
+  set.seed(456)
+  split <- partition(task, ratio=0.8, stratify=TRUE)
+  task_train <- task$clone()$filter(rows=split$train)
+  task_test <- task$clone()$filter(rows=split$test)
+  
+  #--- Step 3: Feature selection (using nested resampling)
+  measure <- msr("classif.ce") #classification error
+  fselector <- fs("random_search", batch_size = 30)
+  terminator <- trm("evals", n_evals=100)
+  inner_resampling <- rsmp("spcv_coords", folds=5)
+   
+  optFtlrn = AutoFSelector$new(
+    learner = learner,
+    resampling = inner_resampling,
+    measure = measure,
+    terminator = terminator,
+    fselector = fselector
+  )
+  
+  #--- Step 4: Train final model (applies tuning)
+  set.seed(456)
+  optFtlrn$train(task_train) 
+  
+  #--- Step 5: Predict on test data
+  optFtlrnPred <- optFtlrn$predict(task_test) 
+  optFtlrnPred$score(measure)
+  
+  #trained model predictions
+  #optFtlrnPred$prob
+  Test_Conf[[i]] <- optFtlrnPred$confusion
+  RF_scores[[i]] <- optFtlrnPred$score()
+  
+  #--- Step 6: Model visualization
+  # Feature importance
+  TrainImp_dat[[i]] <- as.data.table(optFtlrn$learner$importance(), keep.rownames = TRUE)
+  
+  # Feature Imp
+  #  Level of importance of the features
+  dat_train <- task_train$data()
+  x_train <- dat_train[,-c("dNBRCAT")]
+  
+  model <- Predictor$new(optFtlrn, data = x_train, y = dat_train$dNBRCAT)
+  effects[[i]] <- FeatureEffects$new(model)
+  model_exp = explain_mlr3(optFtlrn,
+                         data = x_train, # provide data without y 
+                         y = dat_train$dNBRCAT,
+                         colorize = FALSE,
+                         type="classification")
+
+  pd_scores[[i]] <- model_profile(model_exp)$agr_profiles
+  
+} 
+
+#results
+RF_scores #trained model predictions on held out data
+RF_dat <- data.table(do.call(rbind, Map(cbind, unname(RF_scores), id = task_names)))
+setnames(RF_dat, "V1", "CE")
+fwrite(RF_dat, "./Outputs/Tables/RF_scores.csv")
+
+names(Test_Conf) <- task_names
+
+TrainImp_dat 
+
+pd_scores 
+effects 
+
+
+
+```
+
+# Results
+
+```{r}
+
+for(i in 1:6){
+  TrainImp_dat[[i]][,FireID := task_names[i]]
+  dat_list[[i]] <- data.table(dat_list[[i]])
+  dat_list[[i]][,FireID := task_names[i]]
+}
+TrainImp_dt <- rbindlist(TrainImp_dat)
+dat_list_dt <- rbindlist(dat_list, fill=TRUE)
+
+setnames(TrainImp_dt, c("Variable","Score","FireID"))
+TrainImp_dt[,VarCat:=ifelse(Variable =="PlantAge","Stand structure",
+                      ifelse(Variable =="BASAL_AREA","Stand structure",
+                       ifelse(Variable =="CROWN_CLOS","Stand structure",
+                        ifelse(Variable =="HistoricFires","Previous wildfire",
+                         #ifelse(Variable =="DFirCov","Stand structure",
+                          #ifelse(Variable =="SpruceCov","Stand structure",
+                           #ifelse(Variable =="FirCov","Stand structure",
+                            #ifelse(Variable =="decidCov","Stand structure",
+                             #ifelse(Variable =="PineCov","Stand structure",
+                              ifelse(Variable == "conifCov","Stand structure",
+                               ifelse(Variable =="PCNM1","Spatial autocorrelation",
+                                ifelse(Variable =="PCNM2","Spatial autocorrelation",
+                                 ifelse(Variable =="PCNM3","Spatial autocorrelation",
+                                  ifelse(Variable =="PCNM4","Spatial autocorrelation",
+                                   ifelse(Variable =="PCNM5","Spatial autocorrelation",
+                                    ifelse(Variable =="PCNM6","Spatial autocorrelation",
+                                     ifelse(Variable =="DEMhli","Topography",
+                                      ifelse(Variable =="DEMtpi","Topography",
+                                       ifelse(Variable =="BEC","Climate",
+                                       ifelse(Variable =="dc","Fuel moisture",
+                                        ifelse(Variable =="isi","Fire behaviour",
+                                         ifelse(Variable =="maxT","Fire weather",
+                                          ifelse(Variable =="maxRH","Fire weather",
+                                           ifelse(Variable =="maxW","Fire weather",
+                                            ifelse(Variable =="FireRun","Fire spread",
+                                              "Forest Management"))))))))))))))))))))]
+TrainImp_dt[,VarNam:=ifelse(Variable =="PlantAge","Plantation Age",
+                      ifelse(Variable =="BASAL_AREA","Basal area (m3/ha)",
+                       ifelse(Variable =="CROWN_CLOS","Crown closure (%)",
+                        ifelse(Variable =="HistoricFires","Time since wildfire",
+                         ifelse(Variable =="Soil","Soil disturbance",
+                          ifelse(Variable =="BroadBurn","Broadcast burn",
+                          ifelse(Variable =="PileBurn","Pile burn",
+                            ifelse(Variable =="SpotBurn","Spot burn",
+                              ifelse(Variable =="DebrisMade","Debris made",
+                                     ifelse(Variable =="DebrisPiled","Debris piled",
+                            ifelse(Variable =="decidCov","Deciduous cover (%)",
+                             ifelse(Variable =="Fertil","Fertilized",
+                              ifelse(Variable == "conifCov","Conifer cover(%)",
+                                     ifelse(Variable =="DEMhli","HLI",
+                                      ifelse(Variable =="DEMtpi","TPI",
+                                       ifelse(Variable =="BEC","BEC",
+                                       ifelse(Variable =="dc","drought code (dc)",
+                                        ifelse(Variable =="isi","initial spread index (isi)",
+                                         ifelse(Variable =="maxT","max temperature",
+                                          ifelse(Variable =="minRH","min relative humidity",
+                                           ifelse(Variable =="maxW","max wind",
+                                            ifelse(Variable =="FireRun","Area burned (%/day)",
+                                              Variable))))))))))))))))))))))]
+colVar <- unique(TrainImp_dt[,.(Variable,VarCat)])
+
+
+TrainImp_dt[]
+TrainImp_dt[order(FireID, -Score)]
+
+
+
+ggplot(TrainImp_dt, aes(x = Score, y = reorder(VarNam,Score))) +  
+  geom_point(aes(colour=FireID), size=3) +
+  scale_color_viridis_d(name="Fire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
+  xlab("Variable importance")+
+  ylab("Variables")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=18))
+ggsave(filename = "Fig2.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+ggplot(TrainImp_dt, aes(x = Score, y = reorder(VarCat,Score))) +  
+  geom_point(aes(colour=FireID), size=3) +
+  scale_color_viridis_d(name="Fire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
+  xlab("Variable importance")+
+  ylab("Variable groups")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=18))
+ggsave(filename = "Fig3.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+ggplot(TrainImp_dt, aes(x = Score, y = reorder(VarNam,Score))) +  
+  geom_point(aes(colour=FireID), size=3) +
+  scale_color_viridis_d(name="Fire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
+  xlab("Variable importance")+
+  ylab("Variable groups")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=12))+
+  facet_wrap("FireID")
+ggsave(filename = "Fig2_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white")
+
+
+# GAMS --------------------------------------------------------------------------------------------------
+
+# from the data in the analysis
+ggplot(dat_list_dt)+
+  geom_point(aes(x = PlantAge, y = dNBRCAT))
+
+#From the data csvs
+csvs_names <- list.files(path="./Inputs/", pattern = "dat270.csv", full.names = TRUE)
+dat_csvs <- purrr::map(csvs_names, fread)
+for(i in 1:6){
+  dat_csvs[[i]][,FireID := c("Chutanli","Tezzeron","Shovel","Verdun","Island","Nadina")[i]]
+}
+dat_csv_dt <- rbindlist(dat_csvs, fill=TRUE)
+setkey(dat_csv_dt,FireID)
+
+###### Plantation Age
+ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
+  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=PlantAge, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+              linewidth=1.5, colour="black")+
+  xlab("Plantation Age")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+
+ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=PlantAge, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("Plantation Age")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+
+####### Crown closure
+ggplot(dat_csv_dt, aes(x=CROWN_CLOS, y=dNBRReSamp))+
+  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=CROWN_CLOS, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+              linewidth=1.5, colour="black")+
+  xlab("Crown closure")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+
+ggplot(dat_csv_dt, aes(x=CROWN_CLOS, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=CROWN_CLOS, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("Crown closure")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+####### Basal area
+ggplot(dat_csv_dt, aes(x=BASAL_AREA, y=dNBRReSamp))+
+  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=BASAL_AREA, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+              linewidth=1.5, colour="black")+
+  xlab("Basal area")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+
+ggplot(dat_csv_dt, aes(x=BASAL_AREA, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=BASAL_AREA, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("Basal area")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+####### max temp
+ggplot(dat_csv_dt, aes(x=maxT, y=dNBRReSamp))+
+  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=maxT, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+              linewidth=1.5, colour="black")+
+  xlab("Max temperature")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+
+ggplot(dat_csv_dt, aes(x=maxT, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=maxT, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("Max temperature")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+####### isi
+ggplot(dat_csv_dt, aes(x=isi, y=dNBRReSamp))+
+  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=isi, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+              linewidth=1.5, colour="black")+
+  xlab("isi")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+
+ggplot(dat_csv_dt, aes(x=isi, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=isi, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("isi")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+####### Conifer cover
+ggplot(dat_csv_dt, aes(x=conifCov, y=dNBRReSamp))+
+  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=conifCov, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+              linewidth=1.5, colour="black")+
+  xlab("conifCov")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+
+ggplot(dat_csv_dt, aes(x=conifCov, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=conifCov, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("conifCov")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+####### Deciduous cover
+ggplot(dat_csv_dt, aes(x=decidCov, y=dNBRReSamp))+
+  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=decidCov, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+              linewidth=1.5, colour="black")+
+  xlab("decidCov")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+
+ggplot(dat_csv_dt, aes(x=decidCov, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=decidCov, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("decidCov")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+
+
+
+```
+
+
