@@ -24,13 +24,13 @@ library(ggplot2)
 #as they are in the park
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
-StudyFireList <- fread("./Inputs/StudyFireList.csv")
+StudyFireList <- fread("../BVRCfire/Inputs/StudyFireList.csv")
 sfl <- StudyFireList[FireID %in% FiresOfInterest]
 Stations <- c("Nadina","Parrott","Houston","Peden","GrassyPlains","HolyCross2",
               "EastOotsa","AugierLake","Vanderhoof","Kluskus","FortStJames","NorthChilco")
 fw_sts <- data.table()
 for(ii in 1:length(Stations)){
-  fw_st <- fread(paste0("./Inputs/Fireweather/2018_",Stations[ii],".csv"),header=TRUE)
+  fw_st <- fread(paste0("../BVRCfire/Inputs/Fireweather/2018_",Stations[ii],".csv"),header=TRUE)
   fw_st[, ':='(stationID = Stations[ii])]
   fw_sts <- rbind(fw_sts,fw_st)
 }
@@ -57,7 +57,7 @@ sts_Dailies <- sf_sts[,.(maxTemp=max(na.omit(temperature)),minRH=min(na.omit(rel
                       by=c("FireID","stationID","dateNoHr","jDay")]
 fwi_sts <- data.table()
 for(ii in 1:length(Stations)){
-  fwi_st <- fread(paste0("./Inputs/Fireweather/2018_",Stations[ii],"_Daily.csv"),header=TRUE)
+  fwi_st <- fread(paste0("../BVRCfire/Inputs/Fireweather/2018_",Stations[ii],"_Daily.csv"),header=TRUE)
   fwi_st[, ':='(stationID = Stations[ii])]
   fwi_sts <- rbind(fwi_sts,fwi_st)
 }
@@ -69,6 +69,21 @@ fwi_dailies <- merge(fwi_sts[,.(stationID,dateNoHr,jDay,gc,ffmc,dmc,dc,isi,bui,f
 sts_Mns <- fwi_dailies[,.(MnMaxTemp=mean(maxTemp),MnMinRH=mean(minRH),MnMaxWind=mean(maxWind),
                           MnBUI=mean(bui),MnISI=mean(isi),MnDMC=mean(dmc),MnDC=mean(dc),MnFWI=mean(fwi)),
                        by=c("FireID","dateNoHr","jDay")]
+fwi_d <- merge(fwi_dailies, data.table(FireID = c("G41607","R11921","R21721","R11498","G51632","R11796"),
+                              FireName = c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun")),
+               by="FireID")
+ggplot(fwi_d)+
+  geom_line(aes(x=jDay,y=fwi, colour=FireName),linewidth=1)+
+  scale_colour_viridis_d(name="Wildfire name",
+                         labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
+  xlab("Julian date")+
+  ylab("Fire Weather Index")+
+  theme_minimal()+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=18))
+ggsave(filename = "Fig1a_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+
+
+
 ggplot()+
   geom_point(data = fwi_dailies[FireID=="R11498"], aes(x=jDay,y=dc))+
   geom_point(data = sts_Mns[FireID=="R11498"], aes(x=jDay,y=MnDC, colour="red"))+

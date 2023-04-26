@@ -17,9 +17,9 @@ library(readr)
 #Users to update these 
 SpatialFilesPath <- "D:/"
 study_fireTable <- fread("./Inputs/StudyFireList.csv")
-dNBR_imageryDates <- fread("./Inputs/dNBR_dates.csv")
+dNBR_imageryDates <- fread("../BVRCfire/Inputs/dNBR_dates.csv")
 #SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods.csv")
-SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods_Disc.csv")
+SitePrepGroups <- fread("../BVRCfire/Inputs/SitePrep_TypeMethods_Disc.csv")
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
 RESULTS_rasts <- c("OPENING_ID","PlantAge","BroadBurn","DebrisMade","DebrisPiled","MechUnk",
@@ -33,7 +33,7 @@ RESULTS_rasts <- c("OPENING_ID","PlantAge","BroadBurn","DebrisMade","DebrisPiled
  # dplyr::select(FIRE_NUMBE,FIRE_YEAR,FIRE_CAUSE)
 #StudyFirePerims <- fire_per_sel %>% dplyr::filter(.,FIRE_NUMBE %in% study_fireTable$FireID)
 # or just read in study fires:
-StudyFirePerims <- read_sf("./Inputs/Shapefiles/Study_fire_perimeters.shp")
+StudyFirePerims <- read_sf("../BVRCfire/Inputs/Shapefiles/Study_fire_perimeters.shp")
 
 #### Results:
 Results_All <- read_sf(paste0(SpatialFilesPath,
@@ -217,7 +217,7 @@ for(ix in 1:length(FiresOfInterest)){
   #############################################
   ##### ADD DETAILED SP AND PLANTS #####
   SitePrep <- data.table()
-  dt <- fread(paste0("./Outputs/IndFiresDat/",FiresOfInterest[ix],"_Firedat_SitePrep_MethAdds.csv"),
+  dt <- fread(paste0("../BVRCfire/Outputs/IndFiresDat/",FiresOfInterest[ix],"_Firedat_SitePrep_MethAdds.csv"),
                 na.strings=c("","NA","<NA>"))
     
   cols <-c("SITE_PREP_","SITE_PRE_2",colnames(dt)[grepl("Type",colnames(dt))])
@@ -253,6 +253,7 @@ for(ix in 1:length(FiresOfInterest)){
   SitePr <- SitePr[, SP_type_meth:= paste0(SP_type,"_",SP_Method)]
   SitePr[, ':='(FireID = FiresOfInterest[ix])]
   SitePrep <- rbind(SitePrep,SitePr,fill=TRUE)
+  hist(SitePrep[SP_Method=="BROAD"]$SP_Date)
   
   unique(SitePrep$SP_type_meth)
   table(SitePrep$SP_type_meth) #WATCH THAT THERE ARE NO NEW COMBINATIONS WITH NEW DATA ENTERED!!
@@ -265,6 +266,10 @@ for(ix in 1:length(FiresOfInterest)){
   #Bring in the grouping variable - only site preps of interest are kept
   SitePrep <- merge(SitePrep,SitePrepGroups,by.x="SP_type_meth", by.y="Type_Method", all.x=TRUE)
   SitePrep[!is.na(GroupName)]
+  SitePrepD <- SitePrep[,.(minD = min(SP_Date,na.rm = TRUE),
+                           maxD = max(SP_Date,na.rm = TRUE)), 
+                        by=c("SP_Method","GroupName")]
+  
   SitePrepCast <- dcast(SitePrep[!is.na(GroupName)], OPENING_ID~GroupName, value.var ="SPgrUse",fun.aggregate=sum)
   for (i in seq_along(SitePrepCast)) set(SitePrepCast, i=which(SitePrepCast[[i]]>0), j=i, value=1)
   
@@ -281,21 +286,43 @@ for(ix in 1:length(FiresOfInterest)){
   Plant_SP[,Fertil := ifelse(FERTILIZ_2==0,0,1)]
   Plant_SP[,Prune := ifelse(PRUNING__1==0,0,1)]
   Plant_SP[,Planted := ifelse(PLANTING_C==0,0,1)]
+  
+  #type of brushing:
+  brushType <- Plant_SP[,.N,by="BRUSHING_T"]
+  fwrite(brushType,paste0("../BVRCfire/Inputs/Brush_type_",FiresOfInterest[ix],".csv"))
+  
+  Plant_SP[,Brush_yr := as.numeric(format(as.Date(BRUSHING_C,Format=c("%Y-%m-%d")),"%Y"))]
+  Plant_SP[,Spaced_yr := as.numeric(format(as.Date(SPACING_CO,Format=c("%Y-%m-%d")),"%Y"))]
+  Plant_SP[,Prune_yr := as.numeric(format(as.Date(PRUNING_CO,Format=c("%Y-%m-%d")),"%Y"))]
+  Plant_SP[,Fert_yr := as.numeric(format(as.Date(FERTILIZ_1,Format=c("%Y-%m-%d")),"%Y"))]
+  
+  sp3 <- data.table(SP_Method=NA, GroupName = c("Brushed","Spaced","Pruned","Fertilized"),
+                    minD = c(Plant_SP[,min(Brush_yr,na.rm = TRUE)],
+                             Plant_SP[,min(Spaced_yr,na.rm = TRUE)],
+                             Plant_SP[,min(Prune_yr,na.rm = TRUE)],
+                             Plant_SP[,min(Fert_yr,na.rm = TRUE)]),
+                    maxD = c(Plant_SP[,max(Brush_yr,na.rm=TRUE)],
+                             Plant_SP[,max(Spaced_yr,na.rm=TRUE)],
+                             Plant_SP[,max(Prune_yr,na.rm=TRUE)],
+                             Plant_SP[,max(Fert_yr,na.rm=TRUE)]))
+  SitePrepD_sp3 <- rbind(SitePrepD,sp3)
+  fwrite(SitePrepD_sp3,paste0("../BVRCfire/Inputs/SitePrepDates",FiresOfInterest[ix],".csv"))
+  
   #figure out which treatments are available in a given fire:
   RESULTS_rasts_avail <- c(colnames(Plant_SP)[colnames(Plant_SP) %in% RESULTS_rasts],"geometry")
   Plant_SP_sf <- st_as_sf(Plant_SP[,..RESULTS_rasts_avail])
   Plant_SP_sf <- st_make_valid(Plant_SP_sf)
   Plant_SP_sf <- st_cast(Plant_SP_sf, to="MULTIPOLYGON")
-  write_sf(Plant_SP_sf, paste0("./Inputs/Shapefiles/",Fire$FIRE_NUMBE,"_Plantations.shp"))
+  write_sf(Plant_SP_sf, paste0("../BVRCfire/Inputs/Shapefiles/",Fire$FIRE_NUMBE,"_Plantations.shp"))
   #rastToMake <- RESULTS_rasts_avail[RESULTS_rasts_avail != "geometry"]
-  rastToMake <- "Disc"
- plot(fasterize(Plant_SP_sf,FireRast, field=RESULTS_rasts[1]))
+  #rastToMake <- "Disc"
+  #plot(fasterize(Plant_SP_sf,FireRast, field=RESULTS_rasts[1]))
   #write out the rasters
-  for(iix in 1:length(rastToMake)){
-    writeRaster(fasterize(Plant_SP_sf,FireRast, field=rastToMake[iix]),
-                paste0("./Inputs/Rasters/PlantationPreds/",Fire$FIRE_NUMBE,"_",rastToMake[iix],".tif"),
-                overwrite=TRUE)
-  }
+  #for(iix in 1:length(rastToMake)){
+   # writeRaster(fasterize(Plant_SP_sf,FireRast, field=rastToMake[iix]),
+    #            paste0("./Inputs/Rasters/PlantationPreds/",Fire$FIRE_NUMBE,"_",rastToMake[iix],".tif"),
+     #           overwrite=TRUE)
+  #}
 }
 
 

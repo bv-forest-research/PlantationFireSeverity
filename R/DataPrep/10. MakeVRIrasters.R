@@ -69,7 +69,7 @@ VRI_Pine <- VRIsp_cov[Species=="PL"|Species=="PLC"|Species=="PLI"|Species=="PA"|
 VRI_Fir <- VRIsp_cov[Species=="BL"|Species=="B"|Species=="BB"|Species=="BM",
                      .(FirCov=sum(PerCover)), 
                      by= "FEATURE_ID"]
-VRI_Spruce <- VRIsp_cov[Species=="S"|Species=="SW"|Species=="PLI"|Species=="SE"|Species=="SX"|Species=="SB"|
+VRI_Spruce <- VRIsp_cov[Species=="S"|Species=="SW"|Species=="SE"|Species=="SX"|Species=="SB"|
                           Species=="SS"|Species=="SXW",
                         .(SpruceCov=sum(PerCover)), 
                         by= "FEATURE_ID"]
