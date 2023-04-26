@@ -3,19 +3,22 @@
 
 # This code intersects the VRI database with the fire perimeters and exports a raster of pre-fire basal area
 
-library(data.table)
-library(dplyr)
-library(plyr)
-library(raster)
-library(fasterize)
-library(sf)
-library(stringr)
-library(readr)
+#------------------------------ Load libraries---------------------------------#
+ls <- c("dplyr", "data.table") # Data Management and Manipulation
+ls <- append(ls, c("raster","sf","fasterize")) # geo comp.
+ls <- append(ls,c("stringr","readr"))
 
+# Install if needed -- then load. 
+new.packages <- ls[!(ls %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+lapply(ls, library, character.only = TRUE)  # load the required packages
+rm(ls, new.packages)
+
+#------------------------------ Set pathways ---------------------------------#
 SpatialFilesPath <- "D:/"
-study_fireTable <- fread("./Inputs/StudyFireList.csv")
-dNBR_imageryDates <- fread("./Inputs/dNBR_dates.csv")
-SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods.csv")
+study_fireTable <- fread("../BVRCfire/Inputs/StudyFireList.csv")
+dNBR_imageryDates <- fread("../BVRCfire/Inputs/dNBR_dates.csv")
+SitePrepGroups <- fread("../BVRCfire/Inputs/SitePrep_TypeMethods.csv")
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
 VRI_rasts <- c("BASAL_AREA","CROWN_CLOS","decidCov","conifCov","PineCov","FirCov",
@@ -98,11 +101,13 @@ for(ix in 1:length(FiresOfInterest)){
   Fire$FirePerim <- 1
   FireRast <- fasterize(Fire,PlotSize, field="FirePerim", background=0)
   plot(FireRast)
-  Fire_VRI <- VRI_study_sel %>%
-    dplyr::select(FEATURE_ID,POLYGON_ID,BASAL_AREA, CROWN_CLOS, CROWN_CL_1, FREE_TO_GR,
-                  HARVEST_DA,PROJ_AGE_1, PROJ_AGE_C, PROJ_AGE_2,PROJ_AGE_3,
-                  PROJ_HEIGH, PROJ_HEI_1, PROJ_HEI_2, PROJ_HEI_3) %>%
-    filter(st_intersects(Fire,., sparse = FALSE))
+  Fire_VRI_int <- VRI_study_sel %>%
+    st_intersects(Fire,., sparse = TRUE)
+  
+  Fire_VRI <- filter(VRI_study_sel %>%
+                       dplyr::select(FEATURE_ID,POLYGON_ID,BASAL_AREA, CROWN_CLOS, CROWN_CL_1, FREE_TO_GR,
+                                     HARVEST_DA,PROJ_AGE_1, PROJ_AGE_C, PROJ_AGE_2,PROJ_AGE_3,
+                                     PROJ_HEIGH, PROJ_HEI_1, PROJ_HEI_2, PROJ_HEI_3), lengths(Fire_VRI_int) > 0)
   Fire_VRI_dt <- as.data.table(Fire_VRI)
   Fire_VRI_dt_comp <- merge(Fire_VRI_dt,VRI_sum_all[,.(FEATURE_ID,decidCov,conifCov,
                                                PineCov, FirCov, SpruceCov, DFirCov)],by="FEATURE_ID")
@@ -110,7 +115,7 @@ for(ix in 1:length(FiresOfInterest)){
   Fire_VRI_dt_comp_sf <- st_as_sf(Fire_VRI_dt_comp[,..VRI_rasts_g])
   for(iix in 1:length(VRI_rasts)){
     writeRaster(fasterize(Fire_VRI_dt_comp_sf,FireRast, field=VRI_rasts[iix]),
-                paste0("./Inputs/Rasters/VRIpreds/",Fire$FIRE_NUMBE,"_",VRI_rasts[iix],".tif"),
+                paste0("../BVRCfire/Inputs/Rasters/VRIpreds/",Fire$FIRE_NUMBE,"_",VRI_rasts[iix],".tif"),
                 overwrite=TRUE)
   }
 }
