@@ -27,7 +27,7 @@ rm(ls, new.packages)
 
 #------------------------------ 1. Load data ----------------------------------#
 #SpatialFilesPath <- "E:/Ingrid/Borealis/BVRCfire"
-SpatialFilesPath <- getwd()
+SpatialFilesPath <- "D:/Github/BVRCfire/"
 # Set the fires of interest - all 2018 fires with openings
 FiresOfInterest <- c("G41607", "G51632", "R11498", "R11796","R11921","R21721")
 
@@ -54,7 +54,7 @@ variable.name <- str_split(variable.name, ".tif", simplify = TRUE)[,1]
 
 names(variables) <- variable.name
 
-#ID the names of the categorical rasters
+#ID the names of the categorical rasters - should we add DOB, FireRun, Fireweather - shouldn't take average of neighbours
 ctg_variables <- c("BEC", "BroadBurn", "Brushed", "DebrisMade", "DebrisPiled", "Fertil", "MechUnk", 
                    "OPENING_ID", "PileBurn", "Prune", "Soil", "Spaced", 
                    "SpotBurn", "WBurn")
@@ -72,11 +72,11 @@ for(i in 1:length(FiresOfInterest)){
   # Resample categorical and continuous variables differently
   a <- list()
   for(j in 1:length(allFireRasts)){
-    if(names(allFireRasts[[j]]) %in% CatRasts){
+  #  if(names(allFireRasts[[j]]) %in% CatRasts){
       a[[j]] <- raster::resample(allFireRasts[[j]], baseFireRast, method = "ngb")
-    } else {
-      a[[j]] <- raster::resample(allFireRasts[[j]], baseFireRast, method = "bilinear")
-    }
+   # } else {
+    #  a[[j]] <- raster::resample(allFireRasts[[j]], baseFireRast, method = "bilinear")
+    #}
   }
   fireID <- str_extract(names(allFireRasts[1]),FiresOfInterest[i])
   SimpleRastnames <- str_remove(str_remove(names(allFireRasts),FiresOfInterest[i]),"_")
@@ -89,64 +89,112 @@ for(i in 1:length(FiresOfInterest)){
 # Create index of raster stacks
 RastStacks <- list(G41607rasts, G51632rasts, R11498rasts, R11796rasts, R11921rasts, R21721rasts)
 
-for(i in 1:length(FiresOfInterest)){
-  allFireRasts <- variables[grep(FiresOfInterest[i],variables)]
-  dNBRFireRast <- allFireRasts[grep("dNBR",allFireRasts)][[1]] #use a raster (doesn't matter which one)
-  
-  # 270 m grid distance
-  b <- aggregate(dNBRFireRast, fact = 9, fun = mean)
-  points270 <- rasterToPoints(b, spatial = TRUE) # get sample grid: 1 point/270 m, spatial = TRUE so coordinates are attached
-  colnames(points270@data) <- "drop" # make sure to drop this later on(it's a place holder column for points)
-  
-  # Extract response and predictor values at sample points
-  SampledRaster <- raster::extract(RastStacks[[i]], points270, sp = TRUE)
-  # Convert to data frame
-  dat270 <- as.data.frame(SampledRaster) # hopefully xy = TRUE will attach coordinates, if not do sp = TRUE in above extract line
-  
-  # Drop rows that don't have an opening ID because we only want to include plantation openings
-  dat270 <- dat270 %>% filter(!is.na(OPENING_ID))
-  # Drop opening ID column
-  dat270 <- subset(dat270, select =-c(OPENING_ID, drop))
-  
-  # Meet spatial RF requirements
-  # 1. Must be free of NA
-  dat270 <- dat270[complete.cases(dat270), ] # remove NAs
-  
-  # 2. Columns cannot have 0 variance
-  RemoveZeroVar <- function(dat270) {
-    dat270[, !sapply(dat270, function(x) min(x) == max(x))]
+if(Create270sample==TRUE){
+  for(i in 1:length(FiresOfInterest)){
+    allFireRasts <- variables[grep(FiresOfInterest[i],variables)]
+    dNBRFireRast <- allFireRasts[grep("dNBR",allFireRasts)][[1]] #use a raster (doesn't matter which one)
+    
+    # 270 m grid distance
+    b <- aggregate(dNBRFireRast, fact = 9, fun = mean)
+    points270 <- rasterToPoints(b, spatial = TRUE) # get sample grid: 1 point/270 m, spatial = TRUE so coordinates are attached
+    colnames(points270@data) <- "drop" # make sure to drop this later on(it's a place holder column for points)
+    
+    # Extract response and predictor values at sample points
+    SampledRaster <- raster::extract(RastStacks[[i]], points270, sp = TRUE)
+    # Convert to data frame
+    dat270 <- as.data.frame(SampledRaster) # hopefully xy = TRUE will attach coordinates, if not do sp = TRUE in above extract line
+    
+    # Drop rows that don't have an opening ID because we only want to include plantation openings
+    dat270 <- dat270 %>% filter(!is.na(OPENING_ID))
+    # Drop opening ID column
+    dat270 <- subset(dat270, select =-c(OPENING_ID, drop))
+    
+    # Meet spatial RF requirements
+    # 1. Must be free of NA
+    dat270 <- dat270[complete.cases(dat270), ] # remove NAs
+    
+    # 2. Columns cannot have 0 variance
+    RemoveZeroVar <- function(dat270) {
+      dat270[, !sapply(dat270, function(x) min(x) == max(x))]
+    }
+    dat270 <- RemoveZeroVar(dat270)
+    
+    # 3. Columns must not yield NaN or Inf when scaled
+    #sum(apply(scale(R11796dat270), 2, is.nan)) 
+    #sum(apply(scale(R11796dat270), 2, is.infinite))
+    # Find which columns are giving issue
+    #sapply(as.data.frame(scale(R21721_270)), function(x)any(is.nan(x)))
+    
+    # Move response (dNBR) to first column
+    dat270 <- dat270 %>% dplyr::select("dNBR", everything())
+    fireID <- str_extract(names(allFireRasts[1]),FiresOfInterest[i])
+    assign(paste0(fireID,"dat270"), dat270)
   }
-  dat270 <- RemoveZeroVar(dat270)
+  #create the sample grid?
+  for(iii in 1:length(FiresOfInterest)){
+      #read in the csv
+      dat270 <- fread(paste0("../BVRCfire/Inputs/",FiresOfInterest[iii],"dat270.csv"))
+      # convert to sf object
+      dat270_sf <- st_as_sf(dat270, coords = c("x","y"))
+      dat270_sf <- dat270_sf %>%
+        dplyr::select(.,c("geometry"))
+      write_sf(dat270_sf, paste0("../BVRCfire/Inputs/",FiresOfInterest[iii],"_270grid.shp"))
+    }
+  list_dats <- list(G41607dat270,G51632dat270,R11498dat270,R11796dat270,R11921dat270,R21721dat270)
+  #FiresOfInterest
+  #watch - order is hard coded
+  for(ii in 1:length(list_dats)){
+    write.csv(list_dats[[ii]],paste0("../BVRCfire/Inputs/",FiresOfInterest[ii],"dat270.csv"),row.names = FALSE)
+  }
   
-  # 3. Columns must not yield NaN or Inf when scaled
-  #sum(apply(scale(R11796dat270), 2, is.nan)) 
-  #sum(apply(scale(R11796dat270), 2, is.infinite))
-  # Find which columns are giving issue
-  #sapply(as.data.frame(scale(R21721_270)), function(x)any(is.nan(x)))
-  
-  # Move response (dNBR) to first column
-  dat270 <- dat270 %>% dplyr::select("dNBR", everything())
-  fireID <- str_extract(names(allFireRasts[1]),FiresOfInterest[i])
-  assign(paste0(fireID,"dat270"), dat270)
-  
-}
-#-----------------------------3. save csvs for RF analysis ----------------------------#
-#watch - order is hard coded
-list_dats <- list(G41607dat270,G51632dat270,R11498dat270,R11796dat270,R11921dat270,R21721dat270)
-FiresOfInterest
-for(ii in 1:length(list_dats)){
-  write.csv(list_dats[[ii]],paste0("./Inputs/",FiresOfInterest[ii],"dat270.csv"),row.names = FALSE)
-}
+}else{ 
+  #already created the sample grid, so just resample updated rasters
+  for(iii in 1:length(FiresOfInterest)){
+    #read in the grid for each fire - hardcoded order
+    dat270grid <- st_read(paste0("../BVRCfire/Inputs/",FiresOfInterest[iii],"_270grid.shp"))
 
-#-----------------------------3b. save 270 grids as spatial objects ----------------------------#
-for(iii in 1:length(FiresOfInterest)){
-  #read in the csv
-  dat270 <- fread(paste0("./Inputs/",FiresOfInterest[iii],"dat270.csv"))
-  # convert to sf object
-  dat270_sf <- st_as_sf(dat270, coords = c("x","y"))
-  dat270_sf <- dat270_sf %>%
-    dplyr::select(.,c("geometry"))
-  write_sf(dat270_sf, paste0("./Inputs/",FiresOfInterest[iii],"_270grid.shp"))
+    # Extract response and predictor values at sample points
+    SampledRaster <- raster::extract(RastStacks[[iii]], dat270grid, sp = TRUE)
+    # Convert to data frame
+    dat270 <- as.data.frame(SampledRaster) # hopefully xy = TRUE will attach coordinates, if not do sp = TRUE in above extract line
+    
+    # Meet spatial RF requirements
+    # 1. Must be free of NA
+    dat270 <- dat270[complete.cases(dat270), ] # remove NAs
+    
+    # 2. Columns cannot have 0 variance
+    RemoveZeroVar <- function(dat270) {
+      dat270[, !sapply(dat270, function(x) min(x) == max(x))]
+    }
+    dat270 <- RemoveZeroVar(dat270)
+    
+    # 3. Columns must not yield NaN or Inf when scaled
+    #sum(apply(scale(R11796dat270), 2, is.nan)) 
+    #sum(apply(scale(R11796dat270), 2, is.infinite))
+    # Find which columns are giving issue
+    #sapply(as.data.frame(scale(R21721_270)), function(x)any(is.nan(x)))
+    
+    # Move response (dNBR) to first column
+    dat270 <- dat270 %>% 
+      dplyr::select("dNBR", everything())%>%
+      dplyr::select(-"OPENING_ID")
+    dat270 <- as.data.table(dat270)
+    setnames(dat270,c("coords.x1","coords.x2"),c("x","y"))
+    assign(paste0(FiresOfInterest[iii],"dat270"), dat270)
+  }
+  
+  list_dats <- list(G41607dat270,G51632dat270,R11498dat270,R11796dat270,R11921dat270,R21721dat270)
+  #FiresOfInterest
+  #watch - order is hard coded
+  for(ii in 1:length(list_dats)){
+    #prev_dat <- fread(paste0("../BVRCfire/Inputs/",FiresOfInterest[ii],"dat270.csv"))
+    #new_dat <- list_dats[[ii]]
+    #fixing the error with spruce:
+    #prev_dat$SpruceCov <- new_dat$SpruceCov
+    #prev_dat$PineCov <- new_dat$PineCov
+    
+    #write.csv(prev_dat,paste0("../BVRCfire/Inputs/",FiresOfInterest[ii],"dat270.csv"),row.names = FALSE)
+    write.csv(list_dats[[ii]],paste0("./Inputs/",FiresOfInterest[ii],"dat270.csv"),row.names = FALSE)
+  }
 }
-
 

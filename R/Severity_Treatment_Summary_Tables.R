@@ -1,14 +1,7 @@
-### Data summaries and visualizations 
 # A. Clason & Ingrid Farnell
 # March, 2022
 
-# This script gathers summary statistics for the manuscript
-# 1. Percent silvicultural treatment per fire
-#    a. only pixels analysed
-#    b. the whole fire area
-# 2. Percent burn severity class within plantations
-# 3. Burn severity variability within plantations (% burn severity in each class in each opening ID)
-
+# This generates Table 1 and Supplementary Table 2
 
 #--libraries
 ls <- c("tidyverse", "data.table") # Data Management and Manipulation
@@ -19,9 +12,9 @@ lapply(ls, library, character.only = TRUE)  # load the required packages
 rm(ls, new.packages)
 
 
-#-----------------------------1. Load data from RF analysis ----------------------------------------#
-datPath <- "../BVRCfire/Inputs/"  #"C:/Users/farne/Documents/" # 
-SpatialFilesPath <- "../BVRCfire/Inputs/" #"E:/Ingrid/Borealis/BVRCfire/Inputs/Study_fire_perimeters/"
+#-----------------1. Load data from RF analysis ----------------------------------------#
+datPath <- "./Inputs/" 
+SpatialFilesPath <- "./Inputs/" 
 
 csvs_names <- list.files(path = datPath, pattern = "dat270.csv", full.names = TRUE)
 dat_csvs <- purrr::map(csvs_names, fread)
@@ -39,23 +32,17 @@ dat_dt <- merge(dat_dt, studyFires[,.(FireID,FireName)], by="FireID")
 setkey(dat_dt,FireName)
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
 
-#-----------------------------2. Check for data errors ----------------------------------------#
-BA_check <- dat_dt[BASAL_AREA>70]
-BA_check_sf <- st_as_sf(BA_check,coords=c("x","y"))
-write_sf(BA_check_sf,"BA_check.gpkg")
-
 #-----------------------------2. Fires ----------------------------------------#
 # Study fire perimeters
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
-#study_fires <- read_sf(paste0(SpatialFilesPath, "./Inputs/Study_fire_perimeters/Study_fire_perimeters.shp"))
-study_fires <- read_sf(paste0(SpatialFilesPath,"Shapefiles/", "Study_fire_perimeters.shp"))
+study_fires <- read_sf(paste0(SpatialFilesPath, "Vectors/StudyFires.shp"))
 
-plant_list <- list.files(paste0(SpatialFilesPath,"Shapefiles/"),
+plant_list <- list.files(paste0(SpatialFilesPath,"Vectors/"),
                          pattern = "Plantations.shp", 
                          recursive = FALSE, 
                          full.names=TRUE)
 # dNBR rasters
-dNBR_list <- list.files(paste0(SpatialFilesPath,"Rasters/dNBR/"),
+dNBR_list <- list.files(paste0(SpatialFilesPath,"Rasters/dNBR"),
                        pattern = "CAT.tif", 
                        recursive = FALSE, 
                        full.names=TRUE)
@@ -80,6 +67,77 @@ names(variables) <- variable.name
 
 
 #----------------------------Data Summaries------------------------------------#
+#--- TABLE 1: Percent burn severity class in fire and within plantations
+# this is at the pixel level, area within plantations (pixels in whole fire)
+
+FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
+study_fireTable <- fread("./Inputs/StudyFireList.csv")
+
+sevTable <- c()
+for(i in 1:length(FiresOfInterest)){
+  dNBR <- raster(paste0("./Inputs/Rasters/dNBR/",FiresOfInterest[[i]],"dNBR_CAT.tif"))
+  plant <- read_sf(paste0("./Inputs/Vectors/",FiresOfInterest[[i]],"_Plantations.shp"))
+  
+  # % in each burn category
+  frqTab <- freq(dNBR)
+  haUnb <- unname(frqTab[1,2])*0.09 #in ha
+  haLow <- unname(frqTab[2,2])*0.09 #in ha
+  haMod <- unname(frqTab[3,2])*0.09 #in ha
+  haHig <- unname(frqTab[4,2])*0.09 #in ha
+  checkTotFireArea <- haUnb + haLow + haMod + haHig
+  print(paste0("ha area estimated from raster ",checkTotFireArea," for ",FiresOfInterest[[i]]))
+  propSev <- as.data.table(frqTab)
+  propSev <- propSev[!is.na(value)]
+  totPix <- sum(propSev$count)
+  propSev[,propSev := count/totPix, by="value"]
+  
+  # clip dNBR to plantation boundaries
+  dNBRPlant <- mask(dNBR, plant)
+  propSevPlant <- as.data.table(freq(dNBRPlant))
+  propSevPlant <- propSevPlant[!is.na(value)]
+  totPix <- sum(propSevPlant$count)
+  propSevPlant[,propSev := count/totPix, by="value"]
+  
+  sevTable <- rbind(sevTable, data.table(FireID = FiresOfInterest[i],
+                                         Sev = propSev$value,
+                                         PropTotFire = round(propSev$propSev*100,0),
+                                         PropPlant = round(propSevPlant$propSev*100,0)))
+}
+
+sevTable <- merge(sevTable, study_fireTable[,.(FireID,FireName)])
+#fwrite(sevTable,"./Outputs/Tables/Table1b.csv")
+
+study_fires <- read_sf(paste0(SpatialFilesPath, "Vectors/StudyFires.shp"))
+Fire_perims <- study_fires %>% filter(FIRE_NUMBE %in% FiresOfInterest)
+
+AreaTable <- c()
+for(ii in 1:length(FiresOfInterest)){
+  #--- total area of the fire
+  fp <- study_fires %>% filter(FIRE_NUMBE == FiresOfInterest[[ii]])
+  fp$TotFireArea <- st_area(fp)
+  fpDT <- as.data.table(fp)
+  fpDT[,TotFireArea := unclass(TotFireArea)/10000]
+  fire_area <- fpDT[,sum(TotFireArea)]
+  
+  #--- area in plantations
+  fpl <- st_read(paste0(SpatialFilesPath,"Vectors/",FiresOfInterest[[ii]],"_Plantations.shp"))
+  fpl$PlantArea <- st_area(fpl)
+  fplDT <- as.data.table(fpl)
+  fplDT[,PlantArea := unclass(PlantArea)/10000]
+  Plantation_area <- fplDT[,sum(PlantArea)]
+  
+  AreaTable <- rbind(AreaTable,data.table(FireID = FiresOfInterest[[ii]], FireArea = round(fire_area,0),
+                                          PlantationArea = round(Plantation_area,0), 
+                                          PropPlantation = round((Plantation_area/fire_area)*100,0)))
+}
+
+table1_manuscript <- merge(AreaTable, 
+                           study_fireTable[,.(FireID,FireName,StartDate,OfficialEndDate)], 
+                           by="FireID")
+fwrite(table1_manuscript, "./Outputs/Tables/Table1.csv")
+
+
+#------Supp Material - Table 2 - proportion of treatments in fire and in analysis ------
 #--- 1. Percent silvicultural treatment / fire 
 #-- a. this is based off pixels that were analysed
 
@@ -99,11 +157,13 @@ for(i in 1:length(Fires)){
   SilvicTable[[i]] <- Silvic[,Fire:=Fires[[i]]]
 }
 
-# number of pixels of each treatment, or Percent of pixels in each treatment out of all the pixels that were included in the analysis
+# number of pixels of each treatment, or Percent of pixels in each 
+#treatment out of all the pixels that were included in the analysis
 SilvicPCTable <- SilvicTable %>% 
   reduce(full_join) %>% # make into one table
   dplyr::select("Fire", everything()) %>% # move "Fire" to first column
-  mutate_at(vars(-c(TotPixAnalys,Fire)), ~round(./TotPixAnalys*100, 1)) %>% # Divide  by total rows to get % silviculture type/fire
+  # Divide  by total rows to get % silviculture type/fire
+  mutate_at(vars(-c(TotPixAnalys,Fire)), ~round(./TotPixAnalys*100, 1)) %>% 
   dplyr::select(-c(TotPixAnalys)) # Drop TotPixAnalys
 
 
@@ -125,8 +185,7 @@ for(i in 1:length(FiresOfInterest)){
   ### Get total number of non NA cells in the fire 
   # the total number of cells in a fire that were in harvested units
   TotalCells <- ncell(PlantStack)-freq(PlantStack, value=NA)
-  Total <- as.data.table(as.list(TotalCells)) #for some reason, not every plant pred has the same total number of pixels - shouldn't they be all the same?
-  #Ingrid - can you look into why this happened?
+  Total <- as.data.table(as.list(TotalCells)) 
   Total[, Fire := FiresOfInterest[i]]
   Total <- melt(Total, id.vars=c("Fire"))
   setnames(Total, "value", "total_Harv")
@@ -138,22 +197,12 @@ for(i in 1:length(FiresOfInterest)){
   Silvic <- melt(Silvic, id.vars=c("Fire"))
   setnames(Silvic, "value", "tot_treat")
   
-  # Join tables & calculate % of the fire area that had each silvicultural treatment applied
+  # Join tables & calculate % of the fire area that 
+  #had each silvicultural treatment applied
   Silvic <- full_join(Silvic, Total)
-  #Silvic[, PC:= round((tot_treat/total_Harv)*100, 1)]
   SilvicFire[[i]] <- Silvic # final table below
 }
-SilvicFirePCtable <- SilvicFire %>% 
-  reduce(full_join) %>% # make into one table
-  dplyr::select("Fire", everything())
 
-#SilvicFire <- dcast(SilvicFirePCtable, 
- #                   Fire ~ variable,
-  #                  value.var = c("tot_treat"))
-
-
-
-#------Table 3 - proportion of treatments in fire and in analysis ------
 
 #1a. Pixels used in analysis
 AnalysisTable <- SilvicTable %>% 
@@ -177,9 +226,9 @@ FireNum_Nam <- fread("./Inputs/StudyFireList.csv")
 #1b
 FireNum_Nam <- data.table(fireNam = c("Chutanli","Nadina","Shovel","Island","Verdun","Tezzeron"),
                           fireNum = c("G41607","R21721","R11498","R11921","R11796","G51632"))
-F_dt <- merge(SilvicFirePCtable, FireNum_Nam[,.(FireID,FireName)], by.x="Fire", by.y="FireID")
+F_dt <- merge(SilvicFirePCtable, FireNum_Nam[,.(fireNum,fireNam)], by.x="Fire", by.y="fireNum")
 F_dt[,Fire:=NULL][,total_Harv:=NULL]#[,PC:=NULL]
-setnames(F_dt,c("FireName"),c("Fire"))
+setnames(F_dt,c("fireNam"),c("Fire"))
 
 a_f_dt <- merge(F_dt,A_dt, by=c("Fire","variable"), all=TRUE)
 a_f_dt <- merge(F_dt,A_dt, by=c("Fire","variable"))
@@ -187,11 +236,7 @@ a_f_dt[,PC_Fire:=round(tot_treat/totHarv*100,1), by=c("Fire","variable")]
 a_f_dt[,PC_Analysed:=round(TreatPixAnalys/TotPixAnalys*100,1), by=c("Fire","variable")]
 a_f_dt <- a_f_dt[order(variable,Fire),.(variable,Fire,tot_treat,totHarv,PC_Fire,
                                         TreatPixAnalys,TotPixAnalys,PC_Analysed)]
-write.csv(a_f_dt, "./Outputs/Tables/Supp_Table2.csv", row.names = FALSE)
-
-
-
-
+write.csv(a_f_dt, "./Outputs/Tables/Supp-Table2.csv", row.names = FALSE)
 #convert to hectares:
 a_f_dt[,tot_treat_ha := tot_treat*0.09]
 a_f_dt[,totHarv_ha := totHarv*0.09]
@@ -200,88 +245,6 @@ a_f_dt[,TotPixAnalys_ha := TotPixAnalys *0.09]
 
 write.csv(a_f_dt[,.(variable,Fire,tot_treat_ha,totHarv_ha, PC_Fire,
                    TreatPixAnalys_ha, TotPixAnalys_ha,PC_Analysed)],
-          "./Outputs/Tables/Table2_ha.csv", row.names = FALSE)
-a_f_dt[,mean(na.omit(PC_Fire)),by="variable"]
-a_f_dt[,sd(na.omit(PC_Fire)),by="variable"]
-
-#get the stats for plantation age:
-
-#range of plantation ages analyzed:
-#PixUse_DT <- rbind(Chutanli, Island,Nadina,Shovel,Tezzeron,Verdun, fill=TRUE)
-Pl_age_use <- dat_dt[,.(minAge = min(PlantAge), maxAge = max(PlantAge)), by="FireID"]
-
-#range of plantation ages across rasters:
-PlAge_rasts <- variables[c(grep("PlantAge",variables))]
-Pl_age_all <- as.data.table(do.call(rbind,lapply(PlAge_rasts, function(x)cellStats(x,"range"))),
-                            row.names=TRUE)
-
-#-------------------------------------------------------------------------
-
-#--- 2. Percent burn severity class within plantations
-# this is at the pixel level, area within plantations (pixels in whole fire)
-
-BurnSevPC <- list()
-plantBurnSevPC <- list()
-plantBurnSevVar <- list()
-
-
-for(i in 1:length(FiresOfInterest)){
-  dNBR <- raster(dNBR_list[i])
-  plant <- st_read(plant_list[i])
-  # clip dNBR to plantation boundaries
-  dNBRPlant <- mask(dNBR, plant)
-  #-- Percent burn severity/category per fire (final table created below, outside of loop)
-  BurnSev <- as.data.table(freq(dNBRPlant))
-  BurnSev[,PC := round(count/(ncell(dNBRPlant)-freq(dNBRPlant, value=NA))*100,1)]
-  BurnSev[, Fire := (FiresOfInterest[i])]
-  BurnSevPC[[i]] <- BurnSev
-  
-#--- 3. Burn severity variability within plantations ## not sure how we want to use this
-  plantBurnSev <- extract(dNBR, plant, df=TRUE)
-  colnames(plantBurnSev)[2] <- "BurnSev"
-  setDT(plantBurnSev)
-  # count for each opening / burn severity category
-  plantBurnSev <- plantBurnSev %>%
-    count(ID, BurnSev)
-  plantBurnSev[, total := sum(n), by = ID]
-  plantBurnSev[, PC := round((n/total)*100, 1), by = ID]
-  plantBurnSev[, Fire := (FiresOfInterest[i])]
-  # Percent burn severity within plantations
-  plantBurnSevPC[[i]] <- plantBurnSev
-  # Variance burn severity within plantations
-  plantBurnSevVar[[i]] <- plantBurnSev %>%
-    group_by(ID) %>%
-    summarise_at(vars(PC), list(var)) # not sure if this calculated variance how I wanted or if variance is 
-  # the stat we want to go with
-}
-
-#-- 2. final table for Percent burn severity class per fire
-BurnSevPCtable <- BurnSevPC %>% 
-  reduce(full_join) %>% # make into one table
-  dplyr::select("Fire", everything()) %>% # move "Fire" to first column
-  na.omit() # remove na rows
-setnames(BurnSevPCtable, "PC", "Percent")
-
-BurnSevPlantPCtable <- plantBurnSevPC %>% 
-  reduce(full_join) %>% # make into one table
-  dplyr::select("Fire", everything()) %>% # move "Fire" to first column
-  na.omit()
-
-fwrite(BurnSevPCtable, "B")
-
-# G41607 = Chutanli
-# G51632 = Tezzeron
-# R11498 = Shovel
-# R11796 = Verdun
-# R11921 = Island
-# R21721 = Nadina
-
-
-
-
-
-
-
-
+          "./Outputs/Tables/Supp-Table2_ha.csv", row.names = FALSE)
 
 

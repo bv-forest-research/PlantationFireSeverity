@@ -36,24 +36,17 @@ rm(ls, new.packages)
 
 ```
 
-# STEP 1
-Load data as sf objects into a list
-
+# RF analysis
+multicorrelated variables are dropped, model is tuned for top pred variables
 ```{r}
 dat_names <- list.files(path="../BVRCfire/Inputs/Shapefiles/", pattern = "cat.gpkg", full.names = TRUE)
 dat_list <- purrr::map(dat_names, read_sf)
 
-#Run it without basal area outliers in Nadina:
+#Remove basal area outliers in Nadina:
 dat_list[[3]] <- dat_list[[3]] %>%
   dplyr::filter(BASAL_AREA<70)
 
-```
 
-# RF analysis
-STEPS 1 - 8
-
-multicorrelated variables are dropped, model is tuned for top pred variables
-```{r}
 task_names <- c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun")
 
 Test_Conf <- list()
@@ -135,17 +128,19 @@ for(i in 1:length(task_names)){
 
   pd_scores[[i]] <- model_profile(model_exp)$agr_profiles
   
+  preds_all <- optFtlrn$predict(task_train)
+  
 } 
 
 # Classification error: 
 RF_dat <- data.table(do.call(rbind, Map(cbind, unname(RF_scores), FireID = task_names)))
 setnames(RF_dat, "V1", "CE")
-fwrite(RF_dat, "./Outputs/Tables/RF_ClassificationError.csv")
+fwrite(RF_dat, "./Outputs/Tables/RF_ClassificationError_nb.csv")
 
 # Partial scores
 TrainImp_dt <- data.table(do.call(rbind, Map(cbind, unname(TrainImp_dat), FireID = task_names)))
 setnames(TrainImp_dt, c("V1","V2"), c("Variable","PartialScore"))
-fwrite(TrainImp_dt, "./Outputs/Tables/RF_PartialScores.csv")
+fwrite(TrainImp_dt, "./Outputs/Tables/RF_PartialScores_nb.csv")
 
 
 ```
@@ -213,9 +208,7 @@ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarNam,PartialScore))) +
   ylab("Variables")+
   theme_minimal()+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=18))
-ggsave(filename = "Fig2.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
-ggsave(filename = "Fig2o.jpg",path = "J:/Github/PlantationFireSeverity/Outputs/Figures/", device='jpeg', dpi=500, bg="white")
-
+ggsave(filename = "Fig3.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
 
 ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarCat,PartialScore))) +  
   geom_point(aes(colour=FireID), size=3) +
@@ -224,8 +217,7 @@ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarCat,PartialScore))) +
   ylab("Variable groups")+
   theme_minimal()+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=18))
-ggsave(filename = "Fig3.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
-ggsave(filename = "Fig3o.jpg",path = "J:/Github/PlantationFireSeverity/Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
 
 ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarNam,PartialScore))) +  
   geom_point(aes(colour=FireID), size=3) +
@@ -235,8 +227,7 @@ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarNam,PartialScore))) +
   theme_minimal()+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))+
   facet_wrap("FireID")
-ggsave(filename = "Fig1_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white")
-ggsave(filename = "Fig1o_supp.jpg",path = "J:/Github/PlantationFireSeverity/Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+ggsave(filename = "FigS4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white")
 
 
 #for presentations
@@ -250,10 +241,6 @@ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarNam,PartialScore))) +
         strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
         text=element_text(size=21)) #for presentations
 
-ggsave(filename = "Fig2.jpg",
-       path = "D:/Sync/BVRC/Fire program/communication/PlantationSeverity/", 
-       device='jpeg', dpi=500, bg="white")
-
 ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarCat,PartialScore))) +  
   geom_point(aes(colour=FireID), size=3) +
   scale_color_viridis_d(name="Fire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
@@ -264,15 +251,10 @@ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarCat,PartialScore))) +
         strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
         text=element_text(size=21)) #for presentations
 
-ggsave(filename = "Fig3.jpg",
-       path = "D:/Sync/BVRC/Fire program/communication/PlantationSeverity/",
-       device='jpeg', dpi=500, bg="white")
-
-
 # GAMS --------------------------------------------------------------------------------------------------
 
 #From the data csvs
-csvs_names <- list.files(path="../BVRCfire/Inputs/", pattern = "dat270.csv", full.names = TRUE)
+csvs_names <- list.files(path="./Inputs/", pattern = "dat270.csv", full.names = TRUE)
 dat_csvs <- purrr::map(csvs_names, fread)
 for(i in 1:6){
   dat_csvs[[i]][,FireID := c("Chutanli","Tezzeron","Shovel","Verdun","Island","Nadina")[i]]
@@ -285,32 +267,64 @@ dat_csv_dt <- dat_csv_dt[BASAL_AREA<70]
 
 ###### Plantation Age
 ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  geom_point(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
-  geom_smooth(aes(x=PlantAge, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+  guides(colour = guide_legend(reverse = TRUE))+
+  geom_smooth(aes(x=PlantAge, y=dNBRReSamp), 
+              method="gam", formula= y ~ s(x),
               linewidth=1.5, colour="black")+
   xlab("Plantation Age")+
   ylab("Fire severity (dNBR)")+
   theme_minimal()+
-  facet_wrap("FireID")+
-#  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
-#ggsave(filename = "Fig2_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+  #facet_wrap("FireID")+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
+        text=element_text(size=21))
+ggsave(filename = "Fig5.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+  
+
+ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
+  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
+                     values=c("darkgreen","yellow","orange","red"))+
+  geom_smooth(aes(x=PlantAge, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
+              color="black", linewidth=2)+
+  xlab("Plantation Age")+
+  ylab("Fire severity (dNBR)")+
+  theme_minimal()+
+  facet_wrap("FireID")+
+  theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
+ggsave(filename = "FigS3.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+  
+
+
+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
         text=element_text(size=21)) #for presentations
 
-ggsave(filename = "Fig4_supp.jpg",
+ggsave(filename = "Fig4.jpg",
        path = "D:/Sync/BVRC/Fire program/communication/PlantationSeverity/",
        device='jpeg', dpi=500, bg="white")
-ggsave(filename = "Fig4o_supp.jpg",path = "J:/Github/PlantationFireSeverity/Outputs/Figures/", device='jpeg', dpi=500, bg="white")
 
-gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge), data = dat_csv_dt[FireID=="Chutanli"], method = "REML")
+
+
+gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge, k=25), data = dat_csv_dt[FireID=="Chutanli"], 
+                    method = "REML", family = "scat")
+summary(gamMod) 
+gam.check(gamMod)
+gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge, k=25), data = dat_csv_dt[FireID=="Island"], 
+                    method = "REML", family = "scat")
 summary(gamMod)
-gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge), data = dat_csv_dt[FireID=="Island"], method = "REML")
+gam.check(gamMod)
+gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge, k=25), data = dat_csv_dt[FireID=="Nadina"], 
+                    method = "REML", family = "scat")
+gamMod <- mgcv::gam(dNBRCAT~s(PlantAge), data = dat_csv_dt[FireID=="Nadina"], 
+                    method = "REML", family = ocat(R=4))
+predict(gamMod,dat_csv_dt[FireID=="Nadina",.(dNBRCAT,PlantAge)],type="response",se=TRUE)
 summary(gamMod)
-gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge), data = dat_csv_dt[FireID=="Nadina"], method = "REML")
-summary(gamMod)
+gam.check(gamMod)
+
 gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge), data = dat_csv_dt[FireID=="Shovel"], method = "REML")
 summary(gamMod)
 gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge), data = dat_csv_dt[FireID=="Tezzeron"], method = "REML")
@@ -320,24 +334,7 @@ summary(gamMod)
 
 
 
-ggplot(dat_csv_dt[FireID=="Tezzeron"], aes(x=PlantAge, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
-  scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
-                     values=c("darkgreen","yellow","orange","red"))+
-  geom_smooth(aes(x=PlantAge, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
-              color="black", linewidth=2)+
-  xlab("Plantation Age")+
-  ylab("Fire severity (dNBR)")+
-  theme_minimal()+
-  #theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
-#ggsave(filename = "Fig4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
-        text=element_text(size=21)) #for presentations
 
-ggsave(filename = "Fig4.jpg",
-       path = "D:/Sync/BVRC/Fire program/communication/PlantationSeverity/",
-       device='jpeg', dpi=500, bg="white")
 
 
 gamMod <- mgcv::gam(dNBRReSamp~s(PlantAge), data = dat_csv_dt, method = "REML")
@@ -382,7 +379,7 @@ ggplot(dat_csv_dt, aes(x=BASAL_AREA, y=dNBRReSamp))+
   theme_minimal()+
   facet_wrap("FireID")+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
-ggsave(filename = "Fig4_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+ggsave(filename = "Fig10_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
 ggsave(filename = "Fig4o2_supp.jpg",path = "J:/Github/PlantationFireSeverity/Outputs/Figures/", device='jpeg', dpi=500, bg="white")
 
 

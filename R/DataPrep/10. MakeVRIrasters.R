@@ -1,7 +1,7 @@
 #Author: A.Clason
 #Date: Updated January 2022
 
-# This code intersects the VRI database with the fire perimeters and exports a raster of pre-fire basal area
+# This generate Table 1 and Supplementary Materials Table 2
 
 #------------------------------ Load libraries---------------------------------#
 ls <- c("dplyr", "data.table") # Data Management and Manipulation

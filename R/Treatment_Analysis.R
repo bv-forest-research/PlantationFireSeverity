@@ -2,6 +2,12 @@
 # A. Clason 
 # February, 2023
 
+#Get, sample and analyze the silviculture treatments data
+# Figure 2
+# Figure 6
+# Figures S6 - S13
+# Table 3
+
 #------------------------------ Load libraries----------------------------------------#
 ls <- c("tidyverse", "data.table") # Data Management and Manipulation
 new.packages <- ls[!(ls %in% installed.packages()[,"Package"])]
@@ -61,7 +67,9 @@ knitr::kable(bb_WT_dt)
 ggplot(bb_all)+
   geom_boxplot(aes(x=BroadBurn, y= dNBR, group=BroadBurn, fill = BroadBurn))+
   xlab("Broadcast burning")+
-  theme_minimal()+
+  ylab("Fire severity(dNBR)")+
+  ylim(c(-500,1300))+
+  theme_bw()+
   scale_fill_manual(values= paper_pal[1:2])+
   scale_colour_manual(values= paper_pal[1:2])+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=21))+
@@ -95,11 +103,14 @@ knitr::kable(d_WT_dt)
 ggplot(d_all)+
   geom_boxplot(aes(x=Disc, y= dNBR, group=Disc, fill = Disc))+
   xlab("Disc trenching")+
-  theme_minimal()+
+  ylab("Fire severity(dNBR)")+
+  ylim(c(-500,1300))+
+  theme_bw()+
   scale_fill_manual(values= paper_pal)+
   scale_colour_manual(values= paper_pal)+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=21))+
-  theme(legend.position = "none",axis.text.x=element_blank())+
+  theme(legend.position = "none",axis.text = element_blank(),
+        axis.title.y = element_blank())+
   facet_wrap("FireName")
 ggsave(filename = "Fig6b.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white")
 #Chutanli and Nadina significant decline in dNBR, others no difference
@@ -130,7 +141,9 @@ knitr::kable(b_WT_dt)
 ggplot(b_all)+
   geom_boxplot(aes(x=Brushed, y= dNBR, group=Brushed, fill = Brushed))+
   xlab("Brushing")+
-  theme_minimal()+
+  ylab("Fire severity(dNBR)")+
+  ylim(c(-500,1300))+
+  theme_bw()+
   scale_fill_manual(values= paper_pal)+
   scale_colour_manual(values= paper_pal)+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=21))+
@@ -165,11 +178,14 @@ knitr::kable(s_WT_dt)
 ggplot(s_all)+
   geom_boxplot(aes(x=Spaced, y= dNBR, group=Spaced, fill = Spaced))+
   xlab("Spacing")+
-  theme_minimal()+
+  ylab("Fire severity(dNBR)")+
+  ylim(c(-500,1300))+
+  theme_bw()+
   scale_fill_manual(values= paper_pal)+
   scale_colour_manual(values= paper_pal)+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=21))+
-  theme(legend.position = "none",axis.text.x=element_blank())+
+  theme(legend.position = "none",axis.text = element_blank(),
+        axis.title.y = element_blank())+
   facet_wrap("FireName")
 ggsave(filename = "Fig6d.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white")
 #Shovel had a higher dNBR with spacing, Chutanli, Verdun, Nadina and Island all had significant decline in dNBR
@@ -267,7 +283,7 @@ a_f_dt[,VarNam:=ifelse(variable =="Soil","Soil disturbance",
 
 ggplot(a_f_dt,aes(x="",y=PC_Fire, fill= Fire))+
   geom_bar(stat="identity", position="dodge")+
-  scale_fill_viridis_d(name="Wildfire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
+  scale_fill_viridis_d(name="Fire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
   xlab("")+
   ylab("Percent harvested area treated")+
   theme_minimal()+
@@ -275,10 +291,10 @@ ggplot(a_f_dt,aes(x="",y=PC_Fire, fill= Fire))+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
         text=element_text(size=18))+ #for presentations
-  facet_wrap(~VarNam)
+  facet_wrap(~VarNam, strip.position = "bottom")
 
-ggsave(filename = "Fig5.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
-ggsave(filename = "Fig5.jpg",
+ggsave(filename = "Fig2.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+ggsave(filename = "Fig2.jpg",
        path = "D:/Sync/BVRC/Fire program/communication/PlantationSeverity/",
        device='jpeg', dpi=500, bg="white")
 
