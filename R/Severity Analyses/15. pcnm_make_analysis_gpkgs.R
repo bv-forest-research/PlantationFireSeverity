@@ -21,9 +21,8 @@ rm(ls, new.packages)
 ctg_variables <- c("BEC", "BroadBurn", "Brushed", "DebrisMade", "DebrisPiled", "Fertil", "MechUnk", 
                    "OPENING_ID", "PileBurn", "Prune", "Soil", "Spaced", 
                    "SpotBurn", "WBurn","dNBRCAT")
-datPath <- "./Inputs/"   #"C:/Users/farne/Documents/" 
 
-Chutanli <- fread(paste0(datPath,"G41607dat270.csv"))
+Chutanli <- fread("./Inputs/Datasets/G41607dat270.csv")
 Chutanli <- Chutanli %>%
   mutate_at((colnames(Chutanli)[colnames(Chutanli) %in% ctg_variables]), factor) %>%
   dplyr::select(-c("dNBRReSamp")) 
@@ -39,7 +38,7 @@ Chutanli[, c("PCNM1","PCNM2", "PCNM3",
                                             Chutanli_pcnm$vectors[,"PCNM5"],
                                             Chutanli_pcnm$vectors[,"PCNM6"])]
 
-Tezzeron <- fread(paste0(datPath,"G51632dat270.csv"))
+Tezzeron <- fread("./Inputs/Datasets/G51632dat270.csv")
 Tezzeron <- Tezzeron %>%
   mutate_at((colnames(Tezzeron)[colnames(Tezzeron) %in% ctg_variables]), factor)%>%
   dplyr::select(-c("dNBRReSamp"))
@@ -55,7 +54,7 @@ Tezzeron[, c("PCNM1","PCNM2", "PCNM3",
                                             Tezzeron_pcnm$vectors[,"PCNM5"],
                                             Tezzeron_pcnm$vectors[,"PCNM6"])]
 
-Shovel <- fread(paste0(datPath,"R11498dat270.csv"))
+Shovel <- fread("./Inputs/Datasets/R11498dat270.csv")
 Shovel <- Shovel %>%
   mutate_at((colnames(Shovel)[colnames(Shovel) %in% ctg_variables]), factor)%>%
   dplyr::select(-c("dNBRReSamp"))
@@ -71,7 +70,7 @@ Shovel[, c("PCNM1","PCNM2", "PCNM3",
                                           Shovel_pcnm$vectors[,"PCNM5"],
                                           Shovel_pcnm$vectors[,"PCNM6"])]
 
-Verdun <- fread(paste0(datPath,"R11796dat270.csv"))
+Verdun <- fread("./Inputs/Datasets/R11796dat270.csv")
 Verdun <- Verdun %>%
   mutate_at((colnames(Verdun)[colnames(Verdun) %in% ctg_variables]), factor)%>%
   dplyr::select(-c("dNBRReSamp"))
@@ -87,7 +86,7 @@ Verdun[, c("PCNM1","PCNM2", "PCNM3",
                                           Verdun_pcnm$vectors[,"PCNM5"],
                                           Verdun_pcnm$vectors[,"PCNM6"])]
 
-Island <- fread(paste0(datPath,"R11921dat270.csv"))
+Island <- fread("./Inputs/Datasets/R11921dat270.csv")
 Island <- Island %>%
   mutate_at((colnames(Island)[colnames(Island) %in% ctg_variables]), factor)%>%
   dplyr::select(-c("dNBRReSamp"))
@@ -103,7 +102,7 @@ Island[, c("PCNM1","PCNM2", "PCNM3",
                                           Island_pcnm$vectors[,"PCNM5"],
                                           Island_pcnm$vectors[,"PCNM6"])]
 
-Nadina <- fread(paste0(datPath,"R21721dat270.csv"))
+Nadina <- fread("./Inputs/Datasets/R21721dat270.csv")
 Nadina <- Nadina %>%
   mutate_at((colnames(Nadina)[colnames(Nadina) %in% ctg_variables]), factor)%>%
   dplyr::select(-c("dNBRReSamp"))
@@ -126,30 +125,60 @@ Nadina[, c("PCNM1","PCNM2", "PCNM3",
 # geom_point(aes(y=Chutanli$dNBR, x= Chutanli_pcnm$vectors[,17]))+
 #geom_smooth(aes(y=Chutanli$dNBR, x= Chutanli_pcnm$vectors[,17]), method="gam")
 
+
+#update dnbr categories based on re-calibration post-CBI work
+m <- c(-Inf,120, 270, 635,Inf)
+#m <- c(-Inf, 99, 269, 659, Inf)
+
+Chutanli[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
+                           right = TRUE, include.lowest = TRUE)]
+Tezzeron[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
+                           right = TRUE, include.lowest = TRUE)]
+Shovel[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
+                         right = TRUE, include.lowest = TRUE)]
+Verdun[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
+                         right = TRUE, include.lowest = TRUE)]
+Island[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
+                         right = TRUE, include.lowest = TRUE)]
+Nadina[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
+                         right = TRUE, include.lowest = TRUE)]
+
 #create datasets with variables to include in analysis. We are keeping them (cat response and continuous response) as seperate datasets, because it's imbedded in the code below to pass the entire object and not specify which columns to ignore
-Chutanli_sf_con <- sf::st_as_sf(Chutanli[,-c("dNBRCAT")], coords = c("x", "y"))
-Chutanli_sf_cat <- sf::st_as_sf(Chutanli[,-c("dNBR")], coords = c("x", "y"))
-write_sf(Chutanli_sf_cat, "./Inputs/Shapefiles/Chutanli_cat.gpkg")
+Chutanli_sf_con <- sf::st_as_sf(Chutanli[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
+Chutanli_sf_cat <- sf::st_as_sf(Chutanli[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
+Chutanli_sf_cal <- sf::st_as_sf(Chutanli[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+write_sf(Chutanli_sf_cat, "./Inputs/Vectors/Chutanli_cat.gpkg")
+write_sf(Chutanli_sf_cal, "./Inputs/Vectors/Chutanli_cal.gpkg")
 
-Tezzeron_sf_con <- sf::st_as_sf(Tezzeron[,-c("dNBRCAT")], coords = c("x", "y"))
-Tezzeron_sf_cat <- sf::st_as_sf(Tezzeron[,-c("dNBR")], coords = c("x", "y"))
-write_sf(Tezzeron_sf_cat, "./Inputs/Shapefiles/Tezzeron_cat.gpkg")
+Tezzeron_sf_con <- sf::st_as_sf(Tezzeron[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
+Tezzeron_sf_cat <- sf::st_as_sf(Tezzeron[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
+Tezzeron_sf_cal <- sf::st_as_sf(Tezzeron[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+write_sf(Tezzeron_sf_cat, "./Inputs/Vectors/Tezzeron_cat.gpkg")
+write_sf(Tezzeron_sf_cal, "./Inputs/Vectors/Tezzeron_cal.gpkg")
 
-Shovel_sf_con <- sf::st_as_sf(Shovel[,-c("dNBRCAT")], coords = c("x", "y"))
-Shovel_sf_cat <- sf::st_as_sf(Shovel[,-c("dNBR")], coords = c("x", "y"))
-write_sf(Shovel_sf_cat, "./Inputs/Shapefiles/Shovel_cat.gpkg")
+Shovel_sf_con <- sf::st_as_sf(Shovel[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
+Shovel_sf_cat <- sf::st_as_sf(Shovel[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
+Shovel_sf_cal <- sf::st_as_sf(Shovel[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+write_sf(Shovel_sf_cat, "./Inputs/Vectors/Shovel_cat.gpkg")
+write_sf(Shovel_sf_cal, "./Inputs/Vectors/Shovel_cal.gpkg")
 
-Verdun_sf_con <- sf::st_as_sf(Verdun[,-c("dNBRCAT")], coords = c("x", "y"))
-Verdun_sf_cat <- sf::st_as_sf(Verdun[,-c("dNBR")], coords = c("x", "y"))
-write_sf(Verdun_sf_cat, "./Inputs/Shapefiles/Verdun_cat.gpkg")
+Verdun_sf_con <- sf::st_as_sf(Verdun[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
+Verdun_sf_cat <- sf::st_as_sf(Verdun[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
+Verdun_sf_cal <- sf::st_as_sf(Verdun[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+write_sf(Verdun_sf_cat, "./Inputs/Vectors/Verdun_cat.gpkg")
+write_sf(Verdun_sf_cal, "./Inputs/Vectors/Verdun_cal.gpkg")
 
-Island_sf_con <- sf::st_as_sf(Island[,-c("dNBRCAT")], coords = c("x", "y"))
-Island_sf_cat <- sf::st_as_sf(Island[,-c("dNBR")], coords = c("x", "y"))
-write_sf(Island_sf_cat, "./Inputs/Shapefiles/Island_cat.gpkg")
+Island_sf_con <- sf::st_as_sf(Island[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
+Island_sf_cat <- sf::st_as_sf(Island[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
+Island_sf_cal <- sf::st_as_sf(Island[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+write_sf(Island_sf_cat, "./Inputs/Vectors/Island_cat.gpkg")
+write_sf(Island_sf_cal, "./Inputs/Vectors/Island_cal.gpkg")
 
-Nadina_sf_con <- sf::st_as_sf(Nadina[,-c("dNBRCAT")], coords = c("x", "y"))
-Nadina_sf_cat <- sf::st_as_sf(Nadina[,-c("dNBR")], coords = c("x", "y"))
-write_sf(Nadina_sf_cat, "./Inputs/Shapefiles/Nadina_cat.gpkg")
+Nadina_sf_con <- sf::st_as_sf(Nadina[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
+Nadina_sf_cat <- sf::st_as_sf(Nadina[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
+Nadina_sf_cal <- sf::st_as_sf(Nadina[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+write_sf(Nadina_sf_cat, "./Inputs/Vectors/Nadina_cat.gpkg")
+write_sf(Nadina_sf_cal, "./Inputs/Vectors/Nadina_cal.gpkg")
 
 # --------------------------------- test correlated variables -----------------------------------
 #--- Assess correlated covariates

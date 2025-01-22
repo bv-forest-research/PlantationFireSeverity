@@ -15,11 +15,10 @@ library(stringr)
 library(readr)
 
 #Users to update these 
-SpatialFilesPath <- "D:/"
 study_fireTable <- fread("./Inputs/StudyFireList.csv")
-dNBR_imageryDates <- fread("../BVRCfire/Inputs/dNBR_dates.csv")
+dNBR_imageryDates <- fread("./Inputs/dNBR_dates.csv")
 #SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods.csv")
-SitePrepGroups <- fread("../BVRCfire/Inputs/SitePrep_TypeMethods_Disc.csv")
+SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods_Disc.csv")
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
 RESULTS_rasts <- c("OPENING_ID","PlantAge","BroadBurn","DebrisMade","DebrisPiled","MechUnk",
@@ -27,17 +26,11 @@ RESULTS_rasts <- c("OPENING_ID","PlantAge","BroadBurn","DebrisMade","DebrisPiled
                    "Fertil","Prune")
 
 ##### Fire perimeters #####
-#fire_perimeters <- read_sf(paste0(SpatialFilesPath,
-                                 # "Spatial Data/Fire/Historical wildfire perimeters/BC Wildfire Historical Fire Perimeters.shp"),quiet=TRUE)
-#fire_per_sel <- fire_perimeters %>%
- # dplyr::select(FIRE_NUMBE,FIRE_YEAR,FIRE_CAUSE)
-#StudyFirePerims <- fire_per_sel %>% dplyr::filter(.,FIRE_NUMBE %in% study_fireTable$FireID)
 # or just read in study fires:
-StudyFirePerims <- read_sf("../BVRCfire/Inputs/Shapefiles/Study_fire_perimeters.shp")
+StudyFirePerims <- read_sf("./Inputs/Vectors/Study_fire_perimeters.shp")
 
 #### Results:
-Results_All <- read_sf(paste0(SpatialFilesPath,
-                              "Spatial Data/RESULTS/RESULTS_FirePerimeter_Intersect.shp"),quiet=T)
+Results_All <- read_sf("./Inputs/Vectors/RESULTS/RESULTS_FirePerimeter_Intersect.shp",quiet=T)
 Results_sel <- Results_All %>%
   dplyr::select(OPENING_ID,OPENING_ST,APPROVE_DA,DISTURBANC,DISTURBA_1,DENUDATION, DENUDATI_1, 
                 DENUDATI_2, DENUDATI_3,
@@ -217,7 +210,7 @@ for(ix in 1:length(FiresOfInterest)){
   #############################################
   ##### ADD DETAILED SP AND PLANTS #####
   SitePrep <- data.table()
-  dt <- fread(paste0("../BVRCfire/Outputs/IndFiresDat/",FiresOfInterest[ix],"_Firedat_SitePrep_MethAdds.csv"),
+  dt <- fread(paste0("./Inputs/Datasets/RESULTS/",FiresOfInterest[ix],"_Firedat_SitePrep_MethAdds.csv"),
                 na.strings=c("","NA","<NA>"))
     
   cols <-c("SITE_PREP_","SITE_PRE_2",colnames(dt)[grepl("Type",colnames(dt))])
@@ -289,7 +282,7 @@ for(ix in 1:length(FiresOfInterest)){
   
   #type of brushing:
   brushType <- Plant_SP[,.N,by="BRUSHING_T"]
-  fwrite(brushType,paste0("../BVRCfire/Inputs/Brush_type_",FiresOfInterest[ix],".csv"))
+  fwrite(brushType,paste0("./Inputs/Datasets/RESULTS/Brush_type_",FiresOfInterest[ix],".csv"))
   
   Plant_SP[,Brush_yr := as.numeric(format(as.Date(BRUSHING_C,Format=c("%Y-%m-%d")),"%Y"))]
   Plant_SP[,Spaced_yr := as.numeric(format(as.Date(SPACING_CO,Format=c("%Y-%m-%d")),"%Y"))]
@@ -306,23 +299,14 @@ for(ix in 1:length(FiresOfInterest)){
                              Plant_SP[,max(Prune_yr,na.rm=TRUE)],
                              Plant_SP[,max(Fert_yr,na.rm=TRUE)]))
   SitePrepD_sp3 <- rbind(SitePrepD,sp3)
-  fwrite(SitePrepD_sp3,paste0("../BVRCfire/Inputs/SitePrepDates",FiresOfInterest[ix],".csv"))
+  fwrite(SitePrepD_sp3,paste0("./Inputs/Datasets/RESULTS/SitePrepDates",FiresOfInterest[ix],".csv"))
   
   #figure out which treatments are available in a given fire:
   RESULTS_rasts_avail <- c(colnames(Plant_SP)[colnames(Plant_SP) %in% RESULTS_rasts],"geometry")
   Plant_SP_sf <- st_as_sf(Plant_SP[,..RESULTS_rasts_avail])
   Plant_SP_sf <- st_make_valid(Plant_SP_sf)
   Plant_SP_sf <- st_cast(Plant_SP_sf, to="MULTIPOLYGON")
-  write_sf(Plant_SP_sf, paste0("../BVRCfire/Inputs/Shapefiles/",Fire$FIRE_NUMBE,"_Plantations.shp"))
-  #rastToMake <- RESULTS_rasts_avail[RESULTS_rasts_avail != "geometry"]
-  #rastToMake <- "Disc"
-  #plot(fasterize(Plant_SP_sf,FireRast, field=RESULTS_rasts[1]))
-  #write out the rasters
-  #for(iix in 1:length(rastToMake)){
-   # writeRaster(fasterize(Plant_SP_sf,FireRast, field=rastToMake[iix]),
-    #            paste0("./Inputs/Rasters/PlantationPreds/",Fire$FIRE_NUMBE,"_",rastToMake[iix],".tif"),
-     #           overwrite=TRUE)
-  #}
+  write_sf(Plant_SP_sf, paste0("./Inputs/Vectors/",Fire$FIRE_NUMBE,"_Plantations.shp"))
 }
 
 
@@ -346,7 +330,7 @@ variable_list <- grep("tif", variable_list, value=TRUE)
 variable_list <- grep("OpenID|None|SitePrepped|n83", variable_list, value = TRUE, invert = TRUE)
 # For now remove this one because the raster contains only NA's -- Alana to fix and then remove this line
 variable_list <- grep("R11498_SpotBurn", variable_list, value = TRUE, invert = TRUE)
-variable_list <- c(variable_list,paste0(SpatialFilesPath,"/Inputs/Rasters/Topography/DEM",
+variable_list <- c(variable_list,paste0("./Inputs/Rasters/DEM/DEM",
                                         c("aspect","hli","slope","tpi"),".tif"))
 
 variables <- sapply(variable_list, raster)
@@ -399,13 +383,13 @@ names(RastStacks) <- c("G41607rasts", "G51632rasts", "R11498rasts", "R11796rasts
 #and output csvs for analysis
 for(i in 1:length(FiresOfInterest)){
   #read in grids:
-  dat270_sf <- read_sf(paste0("./Inputs/",FiresOfInterest[i],"_270grid.shp"))
+  dat270_sf <- read_sf(paste0("./Inputs/Vectors/",FiresOfInterest[i],"_270grid.shp"))
   # intersect with rasters and create csv for each fire
   rasts_of_int <- RastStacks[[paste0(FiresOfInterest[i],"rasts")]]
   rasts270 <-  as.data.table(raster::extract(rasts_of_int, dat270_sf,sp = TRUE))
   rasts270[,dNBR := dNBR*1000]
   
-  fwrite(rasts270, paste0("./Inputs/",FiresOfInterest[i],"silv_270.csv"))
+  fwrite(rasts270, paste0("./Inputs/Datasets/",FiresOfInterest[i],"silv_270.csv"))
   
 }
 

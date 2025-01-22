@@ -15,24 +15,22 @@ lapply(ls, library, character.only = TRUE)  # load the required packages
 rm(ls, new.packages)
 
 #------------------------------ Set pathways ---------------------------------#
-SpatialFilesPath <- "D:/"
-study_fireTable <- fread("../BVRCfire/Inputs/StudyFireList.csv")
-dNBR_imageryDates <- fread("../BVRCfire/Inputs/dNBR_dates.csv")
-SitePrepGroups <- fread("../BVRCfire/Inputs/SitePrep_TypeMethods.csv")
+study_fireTable <- fread("./Inputs/StudyFireList.csv")
+dNBR_imageryDates <- fread("./Inputs/dNBR_dates.csv")
+SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods.csv")
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
 VRI_rasts <- c("BASAL_AREA","CROWN_CLOS","decidCov","conifCov","PineCov","FirCov",
                    "SpruceCov", "DFirCov")
 
 #fire perimeters
-fire_perimeters <- read_sf(paste0(SpatialFilesPath,
-                                  "Spatial Data/Fire/Historical wildfire perimeters/BC Wildfire Historical Fire Perimeters.shp"),quiet=TRUE)
+fire_perimeters <- read_sf("./Inputs/Vectors/Historis fire/BC Wildfire Historical Fire Perimeters.shp")
 fire_per_sel <- fire_perimeters %>%
   dplyr::select(FIRE_NUMBE,FIRE_YEAR,FIRE_CAUSE)
 StudyFirePerims <- fire_per_sel %>% dplyr::filter(.,FIRE_NUMBE %in% FiresOfInterest)
 
 #### VRI:
-VRI_study <- read_sf(paste0(SpatialFilesPath,"/Spatial Data/VRI/2016/BVRCfire_VRI2016.shp"))
+VRI_study <- read_sf("./Inputs/Vectors/VRI/BVRCfire_VRI2016.shp")
 VRI_study_sel <- VRI_study %>%
   dplyr::select(FEATURE_ID,  MAP_ID, POLYGON_ID, OPENING_IN, OPENING_SO, OPENING_NU, OPENING_ID, BASAL_AREA, 
                 CROWN_CLOS, CROWN_CL_1,FREE_TO_GR,HARVEST_DA,PROJ_AGE_1,PROJ_AGE_C,PROJ_AGE_2,PROJ_AGE_3,
@@ -115,7 +113,7 @@ for(ix in 1:length(FiresOfInterest)){
   Fire_VRI_dt_comp_sf <- st_as_sf(Fire_VRI_dt_comp[,..VRI_rasts_g])
   for(iix in 1:length(VRI_rasts)){
     writeRaster(fasterize(Fire_VRI_dt_comp_sf,FireRast, field=VRI_rasts[iix]),
-                paste0("../BVRCfire/Inputs/Rasters/VRIpreds/",Fire$FIRE_NUMBE,"_",VRI_rasts[iix],".tif"),
+                paste0("./Inputs/Rasters/VRIpreds/",Fire$FIRE_NUMBE,"_",VRI_rasts[iix],".tif"),
                 overwrite=TRUE)
   }
 }

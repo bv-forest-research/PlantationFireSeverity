@@ -13,7 +13,7 @@ rm(ls, new.packages)
 
 
 #-----------------1. Load data from RF analysis ----------------------------------------#
-datPath <- "./Inputs/" 
+datPath <- "./Inputs/Datasets/" 
 SpatialFilesPath <- "./Inputs/" 
 
 csvs_names <- list.files(path = datPath, pattern = "dat270.csv", full.names = TRUE)
@@ -26,8 +26,12 @@ dat_dt[is.na(DebrisPiled), DebrisPiled:=0]
 dat_dt[is.na(Prune), Prune:=0]
 dat_dt[is.na(SpotBurn), SpotBurn:=0]
 dat_dt[is.na(DebrisMade), DebrisMade:=0]
+m <- c(-Inf,120, 270, 635,Inf)
+dat_dt[, dNBR_cal := cut(dNBRReSamp, breaks = m, labels = c("1","2","3","4"),
+                           right = TRUE, include.lowest = TRUE)]
 
-studyFires <- fread("./Inputs/StudyFireList.csv")
+
+studyFires <- fread("./Inputs/Datasets/StudyFireList.csv")
 dat_dt <- merge(dat_dt, studyFires[,.(FireID,FireName)], by="FireID")
 setkey(dat_dt,FireName)
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
@@ -43,19 +47,21 @@ plant_list <- list.files(paste0(SpatialFilesPath,"Vectors/"),
                          full.names=TRUE)
 # dNBR rasters
 dNBR_list <- list.files(paste0(SpatialFilesPath,"Rasters/dNBR"),
-                       pattern = "CAT.tif", 
+                       pattern = "cla.tif", 
                        recursive = FALSE, 
                        full.names=TRUE)
 
 
 # Plantation pred rasters
-variable_list <- list.files(paste0(SpatialFilesPath, "Rasters/PlantationPreds/"),
-                            pattern =  paste(FiresOfInterest, sep = "", collapse = "|"),
+silv_variables <- c("BroadBurn", "Brushed", "DebrisMade", "DebrisPiled", "Fertil", "MechUnk", 
+                    "PileBurn", "Prune", "Soil", "Spaced", "SpotBurn", "WBurn","Disc")
+variable_list <- list.files(paste0(SpatialFilesPath, "Rasters/Analysis_layers/"),
+                            pattern =  paste(silv_variables, sep = "", collapse = "|"),
                             recursive = TRUE,
                             full.names = TRUE)
-variable_list <- grep("tif", variable_list, value=TRUE)
+#variable_list <- grep("tif", variable_list, value=TRUE)
 # Drop OpenID, None and SitePrepped
-variable_list <- grep("OpenID|None|SitePrepped|OPENING_ID", variable_list, value = TRUE, invert = TRUE)
+#variable_list <- grep("OpenID|None|SitePrepped|OPENING_ID", variable_list, value = TRUE, invert = TRUE)
 # For now remove this one because the raster contains only NA's -- Alana to fix and then remove this line
 #variable_list <- grep("R11498_SpotBurn", variable_list, value = TRUE, invert = TRUE)
 variables <- sapply(variable_list, raster)
@@ -71,11 +77,11 @@ names(variables) <- variable.name
 # this is at the pixel level, area within plantations (pixels in whole fire)
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
-study_fireTable <- fread("./Inputs/StudyFireList.csv")
+study_fireTable <- fread("./Inputs/Datasets/StudyFireList.csv")
 
 sevTable <- c()
 for(i in 1:length(FiresOfInterest)){
-  dNBR <- raster(paste0("./Inputs/Rasters/dNBR/",FiresOfInterest[[i]],"dNBR_CAT.tif"))
+  dNBR <- raster(paste0("./Inputs/Rasters/dNBR/",FiresOfInterest[[i]],"dNBR_cla.tif"))
   plant <- read_sf(paste0("./Inputs/Vectors/",FiresOfInterest[[i]],"_Plantations.shp"))
   
   # % in each burn category
@@ -86,6 +92,9 @@ for(i in 1:length(FiresOfInterest)){
   haHig <- unname(frqTab[4,2])*0.09 #in ha
   checkTotFireArea <- haUnb + haLow + haMod + haHig
   print(paste0("ha area estimated from raster ",checkTotFireArea," for ",FiresOfInterest[[i]]))
+  print(paste0("ha area from BCWS ",
+               study_fireTable[FireID == FiresOfInterest[[i]]]$Area_upd_2025,
+               " for ",FiresOfInterest[[i]]))
   propSev <- as.data.table(frqTab)
   propSev <- propSev[!is.na(value)]
   totPix <- sum(propSev$count)
@@ -105,7 +114,7 @@ for(i in 1:length(FiresOfInterest)){
 }
 
 sevTable <- merge(sevTable, study_fireTable[,.(FireID,FireName)])
-#fwrite(sevTable,"./Outputs/Tables/Table1b.csv")
+fwrite(sevTable,"./Outputs/Tables/Table1_sev.csv")
 
 study_fires <- read_sf(paste0(SpatialFilesPath, "Vectors/StudyFires.shp"))
 Fire_perims <- study_fires %>% filter(FIRE_NUMBE %in% FiresOfInterest)
@@ -117,7 +126,8 @@ for(ii in 1:length(FiresOfInterest)){
   fp$TotFireArea <- st_area(fp)
   fpDT <- as.data.table(fp)
   fpDT[,TotFireArea := unclass(TotFireArea)/10000]
-  fire_area <- fpDT[,sum(TotFireArea)]
+  fire_area_dt <- fpDT[,sum(TotFireArea)]
+  fire_area <- study_fireTable[FireID == FiresOfInterest[[ii]]]$Area_upd_2025
   
   #--- area in plantations
   fpl <- st_read(paste0(SpatialFilesPath,"Vectors/",FiresOfInterest[[ii]],"_Plantations.shp"))
@@ -126,7 +136,8 @@ for(ii in 1:length(FiresOfInterest)){
   fplDT[,PlantArea := unclass(PlantArea)/10000]
   Plantation_area <- fplDT[,sum(PlantArea)]
   
-  AreaTable <- rbind(AreaTable,data.table(FireID = FiresOfInterest[[ii]], FireArea = round(fire_area,0),
+  AreaTable <- rbind(AreaTable,data.table(FireID = FiresOfInterest[[ii]], 
+                                          FireArea = round(fire_area,0),
                                           PlantationArea = round(Plantation_area,0), 
                                           PropPlantation = round((Plantation_area/fire_area)*100,0)))
 }
@@ -134,7 +145,7 @@ for(ii in 1:length(FiresOfInterest)){
 table1_manuscript <- merge(AreaTable, 
                            study_fireTable[,.(FireID,FireName,StartDate,OfficialEndDate)], 
                            by="FireID")
-fwrite(table1_manuscript, "./Outputs/Tables/Table1.csv")
+fwrite(table1_manuscript, "./Outputs/Tables/Table1_area.csv")
 
 
 #------Supp Material - Table 2 - proportion of treatments in fire and in analysis ------

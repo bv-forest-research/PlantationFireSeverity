@@ -24,22 +24,22 @@ library(ggplot2)
 #as they are in the park
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
-StudyFireList <- fread("../BVRCfire/Inputs/StudyFireList.csv")
+StudyFireList <- fread("./Inputs/StudyFireList.csv")
 sfl <- StudyFireList[FireID %in% FiresOfInterest]
 Stations <- c("Nadina","Parrott","Houston","Peden","GrassyPlains","HolyCross2",
               "EastOotsa","AugierLake","Vanderhoof","Kluskus","FortStJames","NorthChilco")
 fw_sts <- data.table()
 for(ii in 1:length(Stations)){
-  fw_st <- fread(paste0("../BVRCfire/Inputs/Fireweather/2018_",Stations[ii],".csv"),header=TRUE)
+  fw_st <- fread(paste0("./Inputs/Fireweather/2018_",Stations[ii],".csv"),header=TRUE)
   fw_st[, ':='(stationID = Stations[ii])]
   fw_sts <- rbind(fw_sts,fw_st)
 }
-sf_sts <- data.table(FireName=c("Nadina Lake","Nadina Lake","Nadina Lake","Nadina Lake",
-                                "Verdun Mountain","Verdun Mountain",
-                                "Island Lake","Island Lake",
-                                "Shovel Lake","Shovel Lake","Shovel Lake",
-                                "Chutanli Lake",
-                                "Tezzeron Lake","Tezzeron Lake"),
+sf_sts <- data.table(FireName=c("Nadina","Nadina","Nadina","Nadina",
+                                "Verdun","Verdun",
+                                "Island","Island",
+                                "Shovel","Shovel","Shovel",
+                                "Chutanli",
+                                "Tezzeron","Tezzeron"),
                      stationID=c("Nadina","Parrott","Houston","Peden",
                                  "GrassyPlains","Parrott",
                                  "HolyCross2","EastOotsa",
@@ -57,7 +57,7 @@ sts_Dailies <- sf_sts[,.(maxTemp=max(na.omit(temperature)),minRH=min(na.omit(rel
                       by=c("FireID","stationID","dateNoHr","jDay")]
 fwi_sts <- data.table()
 for(ii in 1:length(Stations)){
-  fwi_st <- fread(paste0("../BVRCfire/Inputs/Fireweather/2018_",Stations[ii],"_Daily.csv"),header=TRUE)
+  fwi_st <- fread(paste0("./Inputs/Fireweather/2018_",Stations[ii],"_Daily.csv"),header=TRUE)
   fwi_st[, ':='(stationID = Stations[ii])]
   fwi_sts <- rbind(fwi_sts,fwi_st)
 }
@@ -66,8 +66,14 @@ fwi_dailies <- merge(fwi_sts[,.(stationID,dateNoHr,jDay,gc,ffmc,dmc,dc,isi,bui,f
                      by=c("stationID","dateNoHr","jDay"), all.y=TRUE)
 
 #calculate average daily weather for each fire
-sts_Mns <- fwi_dailies[,.(MnMaxTemp=mean(maxTemp),MnMinRH=mean(minRH),MnMaxWind=mean(maxWind),
-                          MnBUI=mean(bui),MnISI=mean(isi),MnDMC=mean(dmc),MnDC=mean(dc),MnFWI=mean(fwi)),
+sts_Mns <- fwi_dailies[,.(MnMaxTemp = mean(maxTemp),
+                          MnMinRH = mean(minRH),
+                          MnMaxWind = mean(maxWind),
+                          MnBUI = mean(bui),
+                          MnISI = mean(isi),
+                          MnDMC = mean(dmc),
+                          MnDC = mean(dc),
+                          MnFWI = mean(fwi)),
                        by=c("FireID","dateNoHr","jDay")]
 fwi_d <- merge(fwi_dailies, data.table(FireID = c("G41607","R11921","R21721","R11498","G51632","R11796"),
                               FireName = c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun")),
@@ -125,19 +131,41 @@ for(ii in 1:length(FiresOfInterest)){
   writeRaster(maxW_rast,paste0("./Inputs/Rasters/FireWeather/maxW_",FiresOfInterest[ii],".tif"),overwrite=TRUE)
 }
 
-### Kurram's data
-#fw[,FW_Year:=as.numeric(format(Date,format="%Y"))] #which year
-#fw[,jDay:=yday(Date)] #Add julian date using yday because that's what S.Parks does in DOB code
 
-#take the mean of four corners and centre for each fire
-#fw[Fire_ID=="C10784"&jDay==208 & FW_Year==2016]
-#cols <- c("fwi","dc","dmc","dsr","ffmc","fwi","humidity","isi","precipitation","sdmc","temperature","wind")
-#fw_mns <- fw[, lapply(.SD,mean),by=.(Fire_ID,FW_Year,jDay,Date),.SDcols=cols]
-#fw_mns[Fire_ID=="C10784"&jDay==208 & FW_Year==2016]
+#supp figure - 2018 fire weather compared to other years
+library(lubridate)
+gp_weath <- fread("../BVRCfire/Inputs/Fireweather/1995_2021_Grassy_Plains.csv")
+gp_weath[, `:=`(YEAR = as.integer(substr(DATE_TIME, 1, 4)),
+                MONTH_DAY = substr(DATE_TIME, 5, 8),
+                TIME = as.integer(substr(DATE_TIME, 9, 10)))]#[,yr_col := ifelse(YEAR == 2018, "red", "grey")]
+gp_weath[, JULIAN_DAY := yday(ymd(paste0(YEAR, "-", 
+                                         substr(MONTH_DAY, 1, 2), "-", substr(MONTH_DAY, 3, 4))))]
+gp_max <- gp_weath[,max(FIRE_WEATHER_INDEX, na.rm = TRUE), by = .(YEAR, JULIAN_DAY)]
 
-### Kira's weather station data
-#WS_FW <- fread("./Inputs/Fireweather/REVISED fire weather_KMH.csv")
-#setnames(WS_FW,c("MaxTemp","Precip","MinRH","Wind"),paste0("WS_",c("MaxTemp","Precip","MinRH","Wind")))
-#WS_FW[FireName=="Nadina"& Year==2018 & DOB==211]
-#fw_ws <- merge(fw_mns, WS_FW[,.(FireNumber,DOB,Year,WS_MaxTemp,WS_Precip,WS_MinRH,WS_Wind)],
- #              by.x=c("Fire_ID","FW_Year","jDay"),by.y=c("FireNumber","Year","DOB"), all.x=TRUE)
+gp_max <- gp_max[!is.na(V1)]
+ggplot()+
+  geom_point(data = gp_max, aes(x = JULIAN_DAY, y = V1, group = YEAR), colour = "grey", alpha = 0.5)+
+  geom_line(data = gp_max, aes(x = JULIAN_DAY, y = V1, group = YEAR), colour = "grey", alpha = 0.5) +
+  geom_point(data = gp_max[YEAR == 2018], aes(x = JULIAN_DAY, y = V1, group = YEAR), colour = "purple")+
+  geom_line(data = gp_max[YEAR == 2018], aes(x = JULIAN_DAY, y = V1, group = YEAR), colour = "purple")+
+  ylab("max daily FWI")+
+  xlab("julian date")
+
+
+  scale_color_manual(values = c("red" = "red", "grey" = alpha("grey", 50)))
+
+
+ ggplot(gp_weath[!is.na(FIRE_WEATHER_INDEX)])+
+   geom_point(aes(x = MONTH_DAY, y = FIRE_WEATHER_INDEX, colour = yr_col))+
+   scale_color_manual(values = c("red" = "red", "grey" = alpha("grey", 50)))
+ 
+ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarNam,PartialScore))) +  
+   geom_point()
+ #geom_point(aes(colour=FireID), size=3) +
+ #scale_color_viridis_d(name="Fire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
+ xlab("Variable importance")+
+   ylab("Variables")+
+   theme_minimal()+
+   theme(strip.text.x = element_text(face="bold"),text=element_text(size=18))
+ 
+

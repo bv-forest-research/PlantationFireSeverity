@@ -17,10 +17,6 @@ rm(ls, new.packages)
 
 
 #------------ Load data--------------------#
-SpatialFilesPath <- "D:/Github/BVRCfire/" #"E:/Ingrid/Borealis/BVRCfire"
-
-# BEC - all BC
-#BEC_all <- read_sf(paste0(SpatialFilesPath, "./Inputs/BEC_shp/BEC_POLY_polygon.shp"))
 BEC_all <- read_sf("E:/Spatial Data/BEC/BEC_POLY_polygon.shp")
 # processes that happen on all the data and you only need to do it once, do it outside of the loop
 BEC_dt <- data.table(BEC_all)
@@ -30,8 +26,7 @@ BEC_dt[,MapLabInt:=as.numeric(MapLabFact)]
 BEC_all <- st_as_sf(BEC_dt)
 
 # Study fire perimeters
-#study_fires <- read_sf(paste0(SpatialFilesPath, "./Inputs/Study_fire_perimeters/Study_fire_perimeters.shp"))
-study_fires <- read_sf(paste0(SpatialFilesPath, "./Inputs/Shapefiles/Study_fire_perimeters.shp"))
+study_fires <- read_sf(paste0(SpatialFilesPath, "./Inputs/Vectors/Study_fire_perimeters.shp"))
 
 # Base rasters
 base_list <- list.files("./Inputs/Rasters/BaseRasters/",

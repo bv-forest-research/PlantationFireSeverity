@@ -39,7 +39,8 @@ rm(ls, new.packages)
 # RF analysis
 multicorrelated variables are dropped, model is tuned for top pred variables
 ```{r}
-dat_names <- list.files(path="../BVRCfire/Inputs/Shapefiles/", pattern = "cat.gpkg", full.names = TRUE)
+dat_names <- list.files(path="./Inputs/Vectors/", pattern = "cat.gpkg", full.names = TRUE)
+dat_names <- list.files(path="./Inputs/Vectors/", pattern = "cal.gpkg", full.names = TRUE)
 dat_list <- purrr::map(dat_names, read_sf)
 
 #Remove basal area outliers in Nadina:
@@ -64,8 +65,10 @@ for(i in 1:length(task_names)){
                      -DFirCov, -FirCov, -PineCov, -SpruceCov)%>% #keep dc, isi for fire behaviour/spread
           mutate_if(sapply(., is.character), as.factor)
   
-  task <- as_task_classif_st(dat, target = "dNBRCAT", 
+  task <- as_task_classif_st(dat, target = "dNBR_cal", 
                              id = task_names[i])
+  #task <- as_task_classif_st(dat, target = "dNBRCAT", 
+   #                          id = task_names[i])
   
    #--- Step 1: Define a learner
   # default ranger parameters: https://mlr3learners.mlr-org.com/reference/mlr_learners_regr.ranger.html
@@ -116,13 +119,16 @@ for(i in 1:length(task_names)){
   # Feature Imp
   #  Level of importance of the features
   dat_train <- task_train$data()
-  x_train <- dat_train[,-c("dNBRCAT")]
+  x_train <- dat_train[,-c("dNBR_cal")]
+  #x_train <- dat_train[,-c("dNBRCAT")]
   
-  model <- Predictor$new(optFtlrn, data = x_train, y = dat_train$dNBRCAT)
+  model <- Predictor$new(optFtlrn, data = x_train, y = dat_train$dNBR_cal)
+  #model <- Predictor$new(optFtlrn, data = x_train, y = dat_train$dNBRCAT)
   effects[[i]] <- FeatureEffects$new(model)
   model_exp = explain_mlr3(optFtlrn,
                          data = x_train, # provide data without y 
-                         y = dat_train$dNBRCAT,
+                         y = dat_train$dNBR_cal,
+                         #y = dat_train$dNBRCAT,
                          colorize = FALSE,
                          type="classification")
 
@@ -135,12 +141,12 @@ for(i in 1:length(task_names)){
 # Classification error: 
 RF_dat <- data.table(do.call(rbind, Map(cbind, unname(RF_scores), FireID = task_names)))
 setnames(RF_dat, "V1", "CE")
-fwrite(RF_dat, "./Outputs/Tables/RF_ClassificationError_nb.csv")
+fwrite(RF_dat, "./Outputs/Tables/RF_ClassificationError_cal2.csv")
 
 # Partial scores
 TrainImp_dt <- data.table(do.call(rbind, Map(cbind, unname(TrainImp_dat), FireID = task_names)))
 setnames(TrainImp_dt, c("V1","V2"), c("Variable","PartialScore"))
-fwrite(TrainImp_dt, "./Outputs/Tables/RF_PartialScores_nb.csv")
+fwrite(TrainImp_dt, "./Outputs/Tables/RF_PartialScores_cal2.csv")
 
 
 ```
@@ -149,8 +155,8 @@ fwrite(TrainImp_dt, "./Outputs/Tables/RF_PartialScores_nb.csv")
 
 ```{r}
 # FIGURES -------------------------------------------------------------------------------------------
-TrainImp_dt <- fread("./Outputs/Tables/RF_PartialScores.csv")
-unique(TrainImp_dt$Variable)
+TrainImp_dt <- fread("./Outputs/Tables/RF_PartialScores_cal2.csv")
+unb <- unique(TrainImp_dt$Variable)
 
 TrainImp_dt[,VarCat:=ifelse(Variable =="PlantAge","Stand structure",
                       ifelse(Variable =="BASAL_AREA","Stand structure",
@@ -254,7 +260,7 @@ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarCat,PartialScore))) +
 # GAMS --------------------------------------------------------------------------------------------------
 
 #From the data csvs
-csvs_names <- list.files(path="./Inputs/", pattern = "dat270.csv", full.names = TRUE)
+csvs_names <- list.files(path="./Inputs/Datasets", pattern = "dat270.csv", full.names = TRUE)
 dat_csvs <- purrr::map(csvs_names, fread)
 for(i in 1:6){
   dat_csvs[[i]][,FireID := c("Chutanli","Tezzeron","Shovel","Verdun","Island","Nadina")[i]]
@@ -265,9 +271,15 @@ setkey(dat_csv_dt,FireID)
 #remove outlier
 dat_csv_dt <- dat_csv_dt[BASAL_AREA<70]
 
+#update dNBR bins:
+m <- c(-Inf,120, 270, 635,Inf)
+dat_csv_dt[, dNBR_cal := cut(dNBR*1000, breaks = m, labels = c("1","2","3","4"),
+                           right = TRUE, include.lowest = TRUE)]
+
+
 ###### Plantation Age
 ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_point(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   guides(colour = guide_legend(reverse = TRUE))+
@@ -285,7 +297,7 @@ ggsave(filename = "Fig5.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=100
   
 
 ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=PlantAge, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
@@ -342,7 +354,7 @@ summary(gamMod)
 
 ####### Crown closure
 ggplot(dat_csv_dt, aes(x=CROWN_CLOS, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)))+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=CROWN_CLOS, y=dNBRReSamp), method="gam", formula= y ~ s(x),
@@ -352,11 +364,11 @@ ggplot(dat_csv_dt, aes(x=CROWN_CLOS, y=dNBRReSamp))+
   theme_minimal()+
   facet_wrap("FireID")+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
-ggsave(filename = "Fig3_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+ggsave(filename = "FigS9.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
 
 
 ggplot(dat_csv_dt, aes(x=CROWN_CLOS, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=CROWN_CLOS, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
@@ -369,7 +381,7 @@ ggplot(dat_csv_dt, aes(x=CROWN_CLOS, y=dNBRReSamp))+
 
 ####### Basal area
 ggplot(dat_csv_dt, aes(x=BASAL_AREA, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  geom_point(aes(colour = as.factor(dNBR_cal)))+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=BASAL_AREA, y=dNBRReSamp), method="gam", formula= y ~ s(x),
@@ -379,12 +391,12 @@ ggplot(dat_csv_dt, aes(x=BASAL_AREA, y=dNBRReSamp))+
   theme_minimal()+
   facet_wrap("FireID")+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
-ggsave(filename = "Fig10_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+ggsave(filename = "FigS10.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
 ggsave(filename = "Fig4o2_supp.jpg",path = "J:/Github/PlantationFireSeverity/Outputs/Figures/", device='jpeg', dpi=500, bg="white")
 
 
 ggplot(dat_csv_dt, aes(x=BASAL_AREA, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=BASAL_AREA, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
@@ -397,21 +409,21 @@ ggplot(dat_csv_dt, aes(x=BASAL_AREA, y=dNBRReSamp))+
 
 ####### max temp
 ggplot(dat_csv_dt, aes(x=maxT, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  geom_point(aes(colour = as.factor(dNBR_cal)))+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
-  geom_smooth(aes(x=maxT, y=dNBRReSamp), method="gam", formula= y ~ s(x),
+  geom_smooth(aes(x=maxT, y=dNBRReSamp), method="lm", formula= y ~ s(x),
               linewidth=1.5, colour="black")+
   xlab("Max temperature")+
   ylab("Fire severity (dNBR)")+
   theme_minimal()+
   facet_wrap("FireID")+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
-ggsave(filename = "Fig5_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+ggsave(filename = "Fig11.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
 
 
 ggplot(dat_csv_dt, aes(x=maxT, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=maxT, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
@@ -424,7 +436,7 @@ ggplot(dat_csv_dt, aes(x=maxT, y=dNBRReSamp))+
 
 ####### isi
 ggplot(dat_csv_dt, aes(x=isi, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  geom_point(aes(colour = as.factor(dNBR_cal)))+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=isi, y=dNBRReSamp), method="gam", formula= y ~ s(x),
@@ -438,7 +450,7 @@ ggsave(filename = "Fig6_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dp
 
 
 ggplot(dat_csv_dt, aes(x=isi, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=isi, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
@@ -451,7 +463,7 @@ ggplot(dat_csv_dt, aes(x=isi, y=dNBRReSamp))+
 
 ####### Conifer cover
 ggplot(dat_csv_dt, aes(x=conifCov, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  geom_point(aes(colour = as.factor(dNBR_cal)))+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=conifCov, y=dNBRReSamp), method="gam", formula= y ~ s(x),
@@ -465,7 +477,7 @@ ggsave(filename = "Fig7_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dp
 
 
 ggplot(dat_csv_dt, aes(x=conifCov, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=conifCov, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
@@ -478,7 +490,7 @@ ggplot(dat_csv_dt, aes(x=conifCov, y=dNBRReSamp))+
 
 ####### Deciduous cover
 ggplot(dat_csv_dt, aes(x=decidCov, y=dNBRReSamp))+
-  geom_point(aes(colour = as.factor(dNBRCAT)))+
+  geom_point(aes(colour = as.factor(dNBR_cal)))+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=decidCov, y=dNBRReSamp), method="gam", formula= y ~ s(x),
@@ -492,7 +504,7 @@ ggsave(filename = "Fig8_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dp
 
 
 ggplot(dat_csv_dt, aes(x=decidCov, y=dNBRReSamp))+
-  geom_jitter(aes(colour = as.factor(dNBRCAT)), size=2, shape=1, alpha =0.9)+
+  geom_jitter(aes(colour = as.factor(dNBR_cal)), size=2, shape=1, alpha =0.9)+
   scale_color_manual(name="Severity", labels=c("Unburned","Low","Moderate","High"),
                      values=c("darkgreen","yellow","orange","red"))+
   geom_smooth(aes(x=decidCov, y=dNBRReSamp), method="gam", formula= y ~ s(x), 

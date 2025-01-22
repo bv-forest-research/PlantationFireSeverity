@@ -26,27 +26,21 @@ rm(ls, new.packages)
 
 
 #------------------------------ 1. Load data ----------------------------------#
-#SpatialFilesPath <- "E:/Ingrid/Borealis/BVRCfire"
-SpatialFilesPath <- "D:/Github/BVRCfire/"
 # Set the fires of interest - all 2018 fires with openings
 FiresOfInterest <- c("G41607", "G51632", "R11498", "R11796","R11921","R21721")
 
-
 # Read in the rasters
-variable_list <- list.files(paste0(SpatialFilesPath, "/Inputs/Rasters/"),
+variable_list <- list.files("./Inputs/Rasters/Analysis_layers",
                             pattern =  paste(FiresOfInterest, sep = "", collapse = "|"),
                             recursive = TRUE,
                             full.names = TRUE)
 variable_list <- grep("tif", variable_list, value=TRUE)
 # Drop OpenID, None and SitePrepped
-variable_list <- grep("OpenID|None|SitePrepped|n83", variable_list, value = TRUE, invert = TRUE)
+variable_list <- grep("OPENING_ID|None|SitePrepped|n83", variable_list, value = TRUE, invert = TRUE)
 # For now remove this one because the raster contains only NA's -- Alana to fix and then remove this line
 variable_list <- grep("R11498_SpotBurn", variable_list, value = TRUE, invert = TRUE)
-variable_list <- c(variable_list,paste0(SpatialFilesPath,"/Inputs/Rasters/Topography/DEM",
-                                        c("aspect","hli","slope","tpi"),".tif"))
 
 variables <- sapply(variable_list, raster)
-
 
 # Rename the variables 
 variable.name <- lapply(str_split(variable_list,"/"), function(x) grep(".tif", x, value=TRUE))
@@ -54,9 +48,9 @@ variable.name <- str_split(variable.name, ".tif", simplify = TRUE)[,1]
 
 names(variables) <- variable.name
 
-#ID the names of the categorical rasters - should we add DOB, FireRun, Fireweather - shouldn't take average of neighbours
+#ID the names of the categorical rasters 
 ctg_variables <- c("BEC", "BroadBurn", "Brushed", "DebrisMade", "DebrisPiled", "Fertil", "MechUnk", 
-                   "OPENING_ID", "PileBurn", "Prune", "Soil", "Spaced", 
+                    "PileBurn", "Prune", "Soil", "Spaced", 
                    "SpotBurn", "WBurn")
 CatRasts <- grep(paste(ctg_variables,sep = "", collapse = "|"),variable.name,value=TRUE)
 
@@ -133,25 +127,26 @@ if(Create270sample==TRUE){
   #create the sample grid?
   for(iii in 1:length(FiresOfInterest)){
       #read in the csv
-      dat270 <- fread(paste0("../BVRCfire/Inputs/",FiresOfInterest[iii],"dat270.csv"))
+      dat270 <- fread(paste0("./Inputs/Datasets",FiresOfInterest[iii],"dat270.csv"))
       # convert to sf object
       dat270_sf <- st_as_sf(dat270, coords = c("x","y"))
       dat270_sf <- dat270_sf %>%
         dplyr::select(.,c("geometry"))
-      write_sf(dat270_sf, paste0("../BVRCfire/Inputs/",FiresOfInterest[iii],"_270grid.shp"))
+      write_sf(dat270_sf, paste0("./Inputs/Vectors/",FiresOfInterest[iii],"_270grid.shp"))
     }
   list_dats <- list(G41607dat270,G51632dat270,R11498dat270,R11796dat270,R11921dat270,R21721dat270)
   #FiresOfInterest
   #watch - order is hard coded
   for(ii in 1:length(list_dats)){
-    write.csv(list_dats[[ii]],paste0("../BVRCfire/Inputs/",FiresOfInterest[ii],"dat270.csv"),row.names = FALSE)
+    write.csv(list_dats[[ii]],paste0("./Inputs/Datasets",FiresOfInterest[ii],"dat270.csv"),
+              row.names = FALSE)
   }
   
 }else{ 
   #already created the sample grid, so just resample updated rasters
   for(iii in 1:length(FiresOfInterest)){
     #read in the grid for each fire - hardcoded order
-    dat270grid <- st_read(paste0("../BVRCfire/Inputs/",FiresOfInterest[iii],"_270grid.shp"))
+    dat270grid <- st_read(paste0("./Inputs/Vectors",FiresOfInterest[iii],"_270grid.shp"))
 
     # Extract response and predictor values at sample points
     SampledRaster <- raster::extract(RastStacks[[iii]], dat270grid, sp = TRUE)

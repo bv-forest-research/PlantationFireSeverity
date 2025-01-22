@@ -2,10 +2,8 @@
 # Ingrid Farnell
 # Jan 18, 2021
 
-# This script calculates the proportion of the fire that burned each day (#of pixels in dob[i]/total # fire pixels)
-
-
-
+# This script calculates the proportion of the fire that burned each day
+#(#of pixels in dob[i]/total # fire pixels)
 #--------------- Load libraries----------------#
 ls <- c("tidyverse", "data.table") # Data Management and Manipulation
 ls <- append(ls, c("raster")) # geo comp.
@@ -18,10 +16,8 @@ rm(ls, new.packages)
 
 
 #---------------- Load data --------------------#
-SpatialFilesPath <- "D:/Github/BVRCfire" #"E:/Ingrid/Borealis/BVRCfire"
-
 # DOB rasters (can't stack because different extents)
-DOB_list <- list.files(paste0(SpatialFilesPath,"/Inputs/Rasters/DOB/"),
+DOB_list <- list.files("./Inputs/Rasters/DOB/",
                        pattern = "*.tif", 
                        recursive = FALSE, 
                        full.names=TRUE)
@@ -55,7 +51,7 @@ for (i in 1:length(DOB_list)){
   rast.name <- grep(fire.name,DOB_list[i],value = TRUE)
   rast.name.i <- str_split(str_split(rast.name,"_")[[1]][2],".tif")[[1]][1]
   # Write rasters
-  writeRaster(runs, paste0(SpatialFilesPath, "/Inputs/Rasters/FireRuns/", "FireRun_", rast.name.i), format = "GTiff", 
+  writeRaster(runs, paste0("./Inputs/Rasters/FireRuns/", "FireRun_", rast.name.i), format = "GTiff", 
               overwrite = TRUE)
 }
 

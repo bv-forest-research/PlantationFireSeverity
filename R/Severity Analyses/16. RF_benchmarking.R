@@ -1,4 +1,33 @@
 
+#------------------------------ Load libraries---------------------------------#
+ls <- c("tidyverse", "data.table", "magrittr") # Data Management and Manipulation
+ls <- append(ls, c("raster","sf")) # geo comp.
+ls <- append(ls,c("pdp","mlr3","mlr3spatiotempcv","mlr3verse","ranger"))
+ls <- append(ls,c("iml","patchwork","DALEX","DALEXtra"))
+
+# Install if needed -- then load. 
+new.packages <- ls[!(ls %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+lapply(ls, library, character.only = TRUE)  # load the required packages
+rm(ls, new.packages)
+
+
+dat_names <- list.files(path="./Inputs/Shapefiles/", pattern = "cat.gpkg", full.names = TRUE)
+dat_list <- purrr::map(dat_names, read_sf)
+
+#Remove basal area outliers in Nadina:
+dat_list[[3]] <- dat_list[[3]] %>%
+  dplyr::filter(BASAL_AREA<70)
+
+
+task_names <- c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun")
+
+Test_Conf <- list()
+TrainImp_dat <- list()
+RF_scores <- list()
+pd_scores <- list()
+effects <- list()
+NumCores <- 30
 
 
 #---------------------- use benchmarking RF runs to test which fire weather to keep ----------------

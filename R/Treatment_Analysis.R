@@ -73,8 +73,8 @@ ggplot(bb_all)+
   scale_fill_manual(values= paper_pal[1:2])+
   scale_colour_manual(values= paper_pal[1:2])+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=21))+
-  theme(legend.position = "none",axis.text.x=element_blank())+
-  facet_wrap("FireName")
+  theme(legend.position = "none",axis.text.x=element_blank())#+
+ # facet_wrap("FireName")
 ggsave(filename = "Fig6a.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white")
 #Chutanli, Verdun, Island, Nadina sig diff, Tezzeron and Shovel not.
 bb_all[,.N, by=c("FireName","BroadBurn")]

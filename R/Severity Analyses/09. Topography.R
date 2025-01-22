@@ -7,7 +7,7 @@ library(sf)
 dem <- raster("E:/Spatial Data/DEM/DEM_BC_albers.tif")
 
 ### mask the study area
-Study_fires <- read_sf("./Inputs/Shapefiles/Study_fire_perimeters.shp")
+Study_fires <- read_sf("./Inputs/Vectors/Study_fire_perimeters.shp")
 
 #mask dem by study fires:
 dem_studyFires <- raster::mask(dem, Study_fires)
@@ -20,15 +20,15 @@ dem_studyFires <- raster("./Inputs/Rasters/dem_studyFires.tif")
 ### topographic metrics
 #slope
 DEMslope <- raster::terrain(dem_studyFires, opt=c("slope"))
-writeRaster(DEMslope,"./Inputs/Rasters/DEMslope.tif")
+writeRaster(DEMslope,"./Inputs/Rasters/DEM/DEMslope.tif")
 #aspect
 DEMaspect <- raster::terrain(dem_studyFires, opt=c("aspect"))
-writeRaster(DEMaspect,"./Inputs/Rasters/DEMaspect.tif")
+writeRaster(DEMaspect,"./Inputs/Rasters/DEM/DEMaspect.tif")
 
 #Topographic position index
 DEMtpi <- tpi(dem_studyFires, win="circle", scale=100) #not sure what the scale is
-writeRaster(DEMtpi,"DEMtpi.tif")
+writeRaster(DEMtpi,"./Inputs/Rasters/DEM/DEMtpi.tif")
 
 #heat load index (based on McCune and Keon 2002)
 DEMhli <- hli(dem_studyFires)
-writeRaster(DEMhli,"./Inputs/Rasters/DEMhli.tif")
+writeRaster(DEMhli,"./Inputs/Rasters/DEM/DEMhli.tif")
