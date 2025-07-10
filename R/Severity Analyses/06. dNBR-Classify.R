@@ -18,6 +18,8 @@ FiresOfInterest <- c("G41607", "G51632", "R11498", "R11796","R11921","R21721")
 #these are the calibrated classes from CBI analyses:
 m <- c(-Inf, 120, 1,  120, 270, 2,  270, 635, 3, 635,Inf,4)
 #m <- c(-Inf, 99, 1, 99, 269, 2, 269, 659, 3, 659, Inf, 4)
+m <- c(-Inf, 120, 1, 120, Inf, 2)
+
 rclmat <- matrix(m, ncol=3, byrow=TRUE)
 
 
@@ -40,9 +42,12 @@ names(variables) <- variable.name
 
 for(i in 1:length(FiresOfInterest)){
   dnbr_cat <- raster::reclassify(variables[[i]],rclmat)
+  #writeRaster(dnbr_cat,paste0("./Inputs/Rasters/dNBR/",
+   #                           FiresOfInterest[i],
+    #                   "dNBR_cla.tif"), overwrite=TRUE)
   writeRaster(dnbr_cat,paste0("./Inputs/Rasters/dNBR/",
                               FiresOfInterest[i],
-                       "dNBR_cla.tif"), overwrite=TRUE)
+                              "dNBR_bin.tif"), overwrite=TRUE)
   
 }
 

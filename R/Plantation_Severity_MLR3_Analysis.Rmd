@@ -39,8 +39,8 @@ rm(ls, new.packages)
 # RF analysis
 multicorrelated variables are dropped, model is tuned for top pred variables
 ```{r}
-dat_names <- list.files(path="./Inputs/Vectors/", pattern = "cat.gpkg", full.names = TRUE)
-dat_names <- list.files(path="./Inputs/Vectors/", pattern = "cal.gpkg", full.names = TRUE)
+#dat_names <- list.files(path="./Inputs/Vectors/", pattern = "cat.gpkg", full.names = TRUE) #Key and Benson classification
+dat_names <- list.files(path="./Inputs/Vectors/", pattern = "cal.gpkg", full.names = TRUE) #calibrated thresholds from CBI plots
 dat_list <- purrr::map(dat_names, read_sf)
 
 #Remove basal area outliers in Nadina:

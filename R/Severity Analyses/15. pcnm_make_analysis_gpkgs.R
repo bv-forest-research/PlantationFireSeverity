@@ -127,8 +127,8 @@ Nadina[, c("PCNM1","PCNM2", "PCNM3",
 
 
 #update dnbr categories based on re-calibration post-CBI work
-m <- c(-Inf,120, 270, 635,Inf)
-#m <- c(-Inf, 99, 269, 659, Inf)
+m <- c(-Inf,120, 270, 635,Inf) #calibrated from CBI
+#m <- c(-Inf, 99, 269, 659, Inf) #key and benson
 
 Chutanli[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
                            right = TRUE, include.lowest = TRUE)]
@@ -143,42 +143,68 @@ Island[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
 Nadina[, dNBR_cal := cut(dNBR, breaks = m, labels = c("1","2","3","4"),
                          right = TRUE, include.lowest = TRUE)]
 
+m <- c(-Inf,120,Inf) #burned/unburned
+Chutanli[, dNBR_bin := cut(dNBR, breaks = m, labels = c("1","2"),
+                           right = TRUE, include.lowest = TRUE)]
+Tezzeron[, dNBR_bin := cut(dNBR, breaks = m, labels = c("1","2"),
+                           right = TRUE, include.lowest = TRUE)]
+Shovel[, dNBR_bin := cut(dNBR, breaks = m, labels = c("1","2"),
+                         right = TRUE, include.lowest = TRUE)]
+Verdun[, dNBR_bin := cut(dNBR, breaks = m, labels = c("1","2"),
+                         right = TRUE, include.lowest = TRUE)]
+Island[, dNBR_bin := cut(dNBR, breaks = m, labels = c("1","2"),
+                         right = TRUE, include.lowest = TRUE)]
+Nadina[, dNBR_bin := cut(dNBR, breaks = m, labels = c("1","2"),
+                         right = TRUE, include.lowest = TRUE)]
+
 #create datasets with variables to include in analysis. We are keeping them (cat response and continuous response) as seperate datasets, because it's imbedded in the code below to pass the entire object and not specify which columns to ignore
 Chutanli_sf_con <- sf::st_as_sf(Chutanli[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
 Chutanli_sf_cat <- sf::st_as_sf(Chutanli[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
 Chutanli_sf_cal <- sf::st_as_sf(Chutanli[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+Chutanli_sf_bin <- sf::st_as_sf(Chutanli[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
 write_sf(Chutanli_sf_cat, "./Inputs/Vectors/Chutanli_cat.gpkg")
 write_sf(Chutanli_sf_cal, "./Inputs/Vectors/Chutanli_cal.gpkg")
+write_sf(Chutanli_sf_bin, "./Inputs/Vectors/Chutanli_bin.gpkg")
 
 Tezzeron_sf_con <- sf::st_as_sf(Tezzeron[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
 Tezzeron_sf_cat <- sf::st_as_sf(Tezzeron[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
 Tezzeron_sf_cal <- sf::st_as_sf(Tezzeron[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+Tezzeron_sf_bin <- sf::st_as_sf(Tezzeron[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
 write_sf(Tezzeron_sf_cat, "./Inputs/Vectors/Tezzeron_cat.gpkg")
 write_sf(Tezzeron_sf_cal, "./Inputs/Vectors/Tezzeron_cal.gpkg")
+write_sf(Tezzeron_sf_bin, "./Inputs/Vectors/Tezzeron_bin.gpkg")
 
 Shovel_sf_con <- sf::st_as_sf(Shovel[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
 Shovel_sf_cat <- sf::st_as_sf(Shovel[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
 Shovel_sf_cal <- sf::st_as_sf(Shovel[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+Shovel_sf_bin <- sf::st_as_sf(Shovel[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
 write_sf(Shovel_sf_cat, "./Inputs/Vectors/Shovel_cat.gpkg")
 write_sf(Shovel_sf_cal, "./Inputs/Vectors/Shovel_cal.gpkg")
+write_sf(Shovel_sf_bin, "./Inputs/Vectors/Shovel_bin.gpkg")
 
 Verdun_sf_con <- sf::st_as_sf(Verdun[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
 Verdun_sf_cat <- sf::st_as_sf(Verdun[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
 Verdun_sf_cal <- sf::st_as_sf(Verdun[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+Verdun_sf_bin <- sf::st_as_sf(Verdun[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
 write_sf(Verdun_sf_cat, "./Inputs/Vectors/Verdun_cat.gpkg")
 write_sf(Verdun_sf_cal, "./Inputs/Vectors/Verdun_cal.gpkg")
+write_sf(Verdun_sf_bin, "./Inputs/Vectors/Verdun_bin.gpkg")
 
 Island_sf_con <- sf::st_as_sf(Island[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
 Island_sf_cat <- sf::st_as_sf(Island[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
 Island_sf_cal <- sf::st_as_sf(Island[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+Island_sf_bin <- sf::st_as_sf(Island[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
 write_sf(Island_sf_cat, "./Inputs/Vectors/Island_cat.gpkg")
 write_sf(Island_sf_cal, "./Inputs/Vectors/Island_cal.gpkg")
+write_sf(Island_sf_bin, "./Inputs/Vectors/Island_bin.gpkg")
 
 Nadina_sf_con <- sf::st_as_sf(Nadina[,-c("dNBRCAT","dNBR_cal")], coords = c("x", "y"))
 Nadina_sf_cat <- sf::st_as_sf(Nadina[,-c("dNBR","dNBR_cal")], coords = c("x", "y"))
 Nadina_sf_cal <- sf::st_as_sf(Nadina[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
+Nadina_sf_bin <- sf::st_as_sf(Nadina[,-c("dNBR","dNBRCAT")], coords = c("x", "y"))
 write_sf(Nadina_sf_cat, "./Inputs/Vectors/Nadina_cat.gpkg")
 write_sf(Nadina_sf_cal, "./Inputs/Vectors/Nadina_cal.gpkg")
+write_sf(Nadina_sf_bin, "./Inputs/Vectors/Nadina_bin.gpkg")
 
 # --------------------------------- test correlated variables -----------------------------------
 #--- Assess correlated covariates
