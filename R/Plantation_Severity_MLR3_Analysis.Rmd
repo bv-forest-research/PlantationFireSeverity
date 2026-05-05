@@ -233,7 +233,8 @@ ggplot(TrainImp_dt, aes(x = PartialScore, y = reorder(VarNam,PartialScore))) +
   theme_minimal()+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))+
   facet_wrap("FireID")
-ggsave(filename = "FigS4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white")
+ggsave(filename = "FigS4.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=300, bg="white",
+       width = 8.5, height = 11)
 
 
 #for presentations
@@ -287,7 +288,7 @@ ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
               method="gam", formula= y ~ s(x),
               linewidth=1.5, colour="black")+
   xlab("Plantation Age")+
-  ylab("Fire severity (dNBR)")+
+  ylab("Burn severity (dNBR)")+
   theme_minimal()+
   #facet_wrap("FireID")+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -303,11 +304,11 @@ ggplot(dat_csv_dt, aes(x=PlantAge, y=dNBRReSamp))+
   geom_smooth(aes(x=PlantAge, y=dNBRReSamp), method="gam", formula= y ~ s(x), 
               color="black", linewidth=2)+
   xlab("Plantation Age")+
-  ylab("Fire severity (dNBR)")+
+  ylab("Burn severity (dNBR)")+
   theme_minimal()+
-  facet_wrap("FireID")+
+  facet_wrap("FireID", nrow = 3, ncol = 2)+
   theme(strip.text.x = element_text(face="bold"),text=element_text(size=15))
-ggsave(filename = "FigS3.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
+ggsave(filename = "Fig6.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
   
 
 

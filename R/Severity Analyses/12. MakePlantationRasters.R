@@ -15,10 +15,10 @@ library(stringr)
 library(readr)
 
 #Users to update these 
-study_fireTable <- fread("./Inputs/StudyFireList.csv")
-dNBR_imageryDates <- fread("./Inputs/dNBR_dates.csv")
+study_fireTable <- fread("./Inputs/Datasets/StudyFireList.csv")
+dNBR_imageryDates <- fread("./Inputs/Datasets/dNBR_dates.csv")
 #SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods.csv")
-SitePrepGroups <- fread("./Inputs/SitePrep_TypeMethods_Disc.csv")
+SitePrepGroups <- fread("./Inputs/Datasets/SitePrep_TypeMethods_Disc.csv")
 
 FiresOfInterest <- c("R11796","R11498","R21721","R11921","G41607","G51632")
 RESULTS_rasts <- c("OPENING_ID","PlantAge","BroadBurn","DebrisMade","DebrisPiled","MechUnk",
