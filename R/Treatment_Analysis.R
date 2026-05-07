@@ -394,7 +394,80 @@ ggplot(br_dt)+
 ggsave(filename = "Fig13_supp.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=500, bg="white")
 
 
+#------------------------------Age range by fire-------------------------------------------------------#
+#-------------------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------------------#
+#--------------------------------------- 1. read in csvs  ---------------------------------------------#
+csvs_names <- list.files(path="./Inputs/Datasets", pattern = "dat270", full.names = TRUE)
+tr_csvs <- purrr::map(csvs_names, fread)
+tr_names <- str_extract(str_split(list.files(path="./Inputs/Datasets", pattern = "dat270"), 
+                                  pattern = ".csv", simplify = TRUE)[,1], 
+                        paste0(FiresOfInterest,collapse = "|"))
+sa_dt <- rbindlist(Map(function(df, id) {
+  df$FireID <- id
+  df
+}, tr_csvs, tr_names), fill = TRUE)
+
+sa_dt <- sa_dt[,.(FireID, dNBRReSamp, PlantAge)]
+
+
+studyFires <- fread("./Inputs/Datasets/StudyFireList.csv")
+sa_dt <- merge(sa_dt, studyFires[,.(FireID,FireName)], by="FireID")
+
+ggplot(sa_dt, aes(x = FireName, y = PlantAge, fill = FireName)) +
+  geom_violin(alpha = 0.7) +
+  scale_fill_viridis_d(name="Fire",labels=c("Chutanli","Island","Nadina","Shovel","Tezzeron","Verdun"))+
+  geom_boxplot(width = 0.1, fill = "white", alpha = 0.5) +
+  labs(
+    x = "Fire",
+    y = "Plantation Age (years)",
+    #title = "Stand Age Distribution by Fire"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "bold"),
+    axis.title = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+ggsave(filename = "stand_age_by_fire_violin.png", path = "./Outputs/Figures/" , width = 10, height = 6)
 
 
 
+#------------------------------basal area and canopy closure and stand age-----------------------------#
+#-------------------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------------------#
+#--------------------------------------- 1. read in csvs  ---------------------------------------------#
+csvs_names <- list.files(path="./Inputs/Datasets", pattern = "dat270", full.names = TRUE)
+tr_csvs <- purrr::map(csvs_names, fread)
+tr_names <- str_extract(str_split(list.files(path="./Inputs/Datasets", pattern = "dat270"), 
+                                  pattern = ".csv", simplify = TRUE)[,1], 
+                        paste0(FiresOfInterest,collapse = "|"))
+ba_cc_dt <- rbindlist(Map(function(df, id) {
+  df$FireID <- id
+  df
+}, tr_csvs, tr_names), fill = TRUE)
 
+ba_cc_dt[, AgeBin := cut(PlantAge, 
+                     breaks = c(-1, 10, 20, 30, 40, 100),
+                     labels = c("0-10", "11-20", "21-30", "31-40", "40+"),
+                     include.lowest = TRUE)]
+
+# Create the plot
+ggplot(ba_cc_dt, aes(x = BASAL_AREA, y = CROWN_CLOS, color = AgeBin)) +
+  geom_point(alpha = 0.5, size = 2) +
+  scale_color_viridis_d(option = "plasma", name = "Stand Age (years)") +
+  labs(
+    title = "Relationship between Canopy Cover and Basal Area",
+    subtitle = "Colored by Stand Age Classes",
+    x = "Basal Area",
+    y = "Crown Closure (%)"
+  ) +
+  facet_wrap(~AgeBin)+
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
