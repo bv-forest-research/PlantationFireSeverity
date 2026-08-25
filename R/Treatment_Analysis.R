@@ -288,8 +288,7 @@ ggplot(a_f_dt,aes(x="",y=PC_Fire, fill= Fire))+
   ylab("Percent harvested area treated")+
   theme_minimal()+
   #theme(strip.text.x = element_text(face="bold"),text=element_text(size=18))+
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
+  theme(strip.background = element_blank(),strip.text.x = element_text(face="bold"), 
         text=element_text(size=18))+ #for presentations
   facet_wrap(~VarNam, strip.position = "bottom")
 
@@ -311,7 +310,7 @@ tr_names <- str_extract(str_split(list.files(path="../BVRCfire/Inputs/", pattern
                       pattern = ".csv", simplify = TRUE)[,1], paste0(FiresOfInterest,collapse = "|"))
 
 tr_dt <- data.table(do.call(rbind, Map(cbind, tr_csvs, FireID = tr_names)))
-studyFires <- fread("./Inputs/StudyFireList.csv")
+studyFires <- fread("./Inputs/Datasets/StudyFireList.csv")
 tr_dt <- merge(tr_dt, studyFires[,.(FireID,FireName)], by="FireID")
 #change disc back to soil
 tr_dt[SP_Method=="DISC", GroupName:="Soil"]
